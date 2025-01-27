@@ -2236,6 +2236,7 @@ KMS Keys - aws/ebs or customer managed
         - Removes the Public IPv4
         - Replaces with the Elastic IP
         - You can’t regain the old public IPv4 if you remove Elastic IP
+        ![alt text](image-2.png)
     - 0 or more IPv6 addresses
     - Security Groups
     - Source/Destination Check
@@ -2447,6 +2448,10 @@ Relogin
 - **Bursty** capacity needs
 - **Cost sensitive** workloads
 - Anything which is **stateless**
+
+![alt text](image.png)
+
+![alt text](image-1.png)
 
 ### Reserved
 
@@ -2946,6 +2951,8 @@ aws ssm get-parameters-by-path --path /my-app/ --with-decryption # decrypt encry
     - Fast speeds
     - Low latency
 
+    ![alt text](image-3.png)
+
 ### Spread Placement Groups
 
 > *Keep instances separated*
@@ -2958,6 +2965,8 @@ aws ssm get-parameters-by-path --path /my-app/ --with-decryption # decrypt encry
 - Not supported for Dedicated Instances or Hosts
 - Use case
     - Small number of critical instances that need to be kept separated from each other
+    
+![alt text](image-5.png)
 
 ### Partition Placement Groups
 
@@ -2972,6 +2981,8 @@ aws ssm get-parameters-by-path --path /my-app/ --with-decryption # decrypt encry
 - Great for topology aware applications
     - HDFS, HBase and Cassandra
 - Contain the impact of failure to part of an application
+
+![alt text](image-6.png)
 
 ## EC2 Dedicated Hosts
 
