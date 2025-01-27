@@ -2216,6 +2216,114 @@ KMS Keys - aws/ebs or customer managed
     - **No performance loss!**
 - If you need the OS to encrypt things, you must configure volume encryption (software disk encryption) by yourself
 
+## EC2 Hibernate
+
+### Overview
+
+EC2 Hibernate is a feature that preserves the in-memory state of an EC2 instance, allowing for faster restarts and application initialization. When an instance hibernates, AWS saves the contents of RAM to the root EBS volume, enabling a quicker recovery of the instance state when restarted.
+
+### How EC2 Hibernate Works
+
+- **Running State**
+   - Instance is fully operational
+   - RAM contains active memory state
+   - Root EBS volume is encrypted
+
+-  **Hibernation Process**
+   - Instance enters "stopping" state
+   - RAM contents are written to encrypted EBS volume
+   - Instance enters "stopped" state
+   - RAM state is preserved in EBS
+
+-  **Resume Process**
+   - Instance starts up
+   - RAM state is restored from EBS
+   - Instance returns to "running" state
+   - OS is not restarted
+
+## Key Features
+
+- The OS is not stopped or restarted during hibernation
+- Boot time is significantly faster compared to regular starts
+- RAM state is written to an encrypted root EBS volume
+- In-memory processing state is preserved
+
+## Use Cases
+
+-  **Long-running Processing**
+   - Batch processing
+   - Data analysis
+   - Long-running computations
+
+-  **State Preservation**
+   - Saving RAM state between sessions
+   - Maintaining application state
+   - Preserving in-memory caches
+
+-  **Quick Recovery**
+   - Services that take time to initialize
+   - Applications with lengthy startup times
+   - Systems requiring fast availability
+
+## Technical Requirements
+
+### Instance Specifications
+- **Supported Instance Families**: C3, C4, C5, I3, M3, M4, R3, R4, T2, T3
+- **RAM Size Limit**: Must be less than 150 GB
+- **Instance Type**: Not supported for bare metal instances
+
+### Platform Requirements
+- **Supported AMIs**:
+  - Amazon Linux 2
+  - Linux AMI
+  - Ubuntu
+  - RHEL
+  - CentOS
+  - Windows
+
+### Storage Requirements
+- **Root Volume**:
+  - Must be EBS
+  - Must be encrypted
+  - Cannot be instance store
+  - Must be large enough to store RAM contents
+
+### Purchase Options
+- Available for:
+  - On-Demand Instances
+  - Reserved Instances
+  - Spot Instances
+
+### Time Limitations
+- Maximum hibernation period: 60 days
+
+## Instance Lifecycle
+
+### Stop vs. Terminate
+- **Stop**: EBS data is preserved for next start
+- **Terminate**: EBS volumes marked for destruction are lost
+
+### Start-up Process
+1. First Start:
+   - OS boots
+   - EC2 User Data script executes
+2. Subsequent Starts:
+   - OS boots up
+3. Application Initialization:
+   - Applications start
+   - Caches warm up
+   - Services initialize
+
+## Best Practices
+- Ensure root volume has sufficient space for RAM contents
+- Use encryption for root EBS volume
+- Consider hibernation for applications with long initialization times
+- Plan for the 60-day hibernation limit
+- Test hibernation behavior before implementing in production
+
+![alt text](image-9.png)
+
+
 ## (Elastic) Network Interfaces, Instance IPs and DNS
 
 ### EC2 Network & DNS Architecture
@@ -2244,6 +2352,8 @@ KMS Keys - aws/ebs or customer managed
         - Disable to use EC2 instance as NAT
 - Secondary ENI
     - As above, but can be detached and moved to other EC2 instances
+
+![alt text](image-7.png)
 
 ### Key Concepts
 
@@ -2965,7 +3075,7 @@ aws ssm get-parameters-by-path --path /my-app/ --with-decryption # decrypt encry
 - Not supported for Dedicated Instances or Hosts
 - Use case
     - Small number of critical instances that need to be kept separated from each other
-    
+
 ![alt text](image-5.png)
 
 ### Partition Placement Groups
