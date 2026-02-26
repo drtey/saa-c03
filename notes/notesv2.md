@@ -3946,6 +3946,8 @@ Equally distribute load to instances across AZs
 
 ![Untitled](img/Untitled%20113.png)
 
+<img width="1118" height="688" alt="image" src="https://github.com/user-attachments/assets/9aff35f1-be9c-4d4b-9642-4d84527a9fc9" />
+
 ### Scaling Policies
 
 - **Manual Scaling** - Manually adjust the desired capacity
