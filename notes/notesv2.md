@@ -1315,9 +1315,13 @@ Objects cannot be made publicly accessible. Any Access of data requires a retrie
 
 ![Untitled](img/Untitled%2023.png)
 
-### S3 Storage Class Comparation
+### S3 Storage Class Comparison
 
 <img width="1736" height="856" alt="image" src="https://github.com/user-attachments/assets/a972adf3-0d8f-456a-b065-36ef9de53118" />
+
+### S3 Storage Classes - Price Comparison
+
+<img width="2490" height="1207" alt="image" src="https://github.com/user-attachments/assets/fe27aecf-fbe0-427d-b817-e23aeaaf6f86" />
 
 ## S3 Lifecycle Configuration
 
