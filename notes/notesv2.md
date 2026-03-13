@@ -1323,6 +1323,10 @@ Objects cannot be made publicly accessible. Any Access of data requires a retrie
 
 <img width="2490" height="1207" alt="image" src="https://github.com/user-attachments/assets/fe27aecf-fbe0-427d-b817-e23aeaaf6f86" />
 
+### S3 Express One Zone
+
+<img width="2452" height="1164" alt="image" src="https://github.com/user-attachments/assets/0e4835c6-299b-4ce1-9b22-4e1e31a640ec" />
+
 ## S3 Lifecycle Configuration
 
 > Automatically transition or expire objects in a bucket. Optimize costs.
