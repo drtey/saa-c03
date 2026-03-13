@@ -1350,6 +1350,10 @@ Objects cannot be made publicly accessible. Any Access of data requires a retrie
 
 <img width="2342" height="1185" alt="image" src="https://github.com/user-attachments/assets/da488f69-a227-4656-a547-8d5a217f6ea8" />
 
+## S3 Analytics
+
+<img width="2345" height="1266" alt="image" src="https://github.com/user-attachments/assets/34ac6e0f-fa57-4c23-a6bd-e7da2b0a8d05" />
+
 ## S3 Replication
 
 - **CRR: Cross-Region Replication**
