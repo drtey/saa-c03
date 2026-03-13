@@ -1354,6 +1354,10 @@ Objects cannot be made publicly accessible. Any Access of data requires a retrie
 
 <img width="2345" height="1266" alt="image" src="https://github.com/user-attachments/assets/34ac6e0f-fa57-4c23-a6bd-e7da2b0a8d05" />
 
+## S3 Requester Pays
+
+<img width="2354" height="1208" alt="image" src="https://github.com/user-attachments/assets/572c25d2-f2ee-450a-a773-f8790cdb8973" />
+
 ## S3 Replication
 
 - **CRR: Cross-Region Replication**
@@ -1456,6 +1460,22 @@ SQL-Like statement*
     - Newer and adds support for more services and events
 
 ![Untitled](img/Untitled%2030.png)
+
+<img width="2475" height="1287" alt="image" src="https://github.com/user-attachments/assets/b2f87856-4dc8-4864-af91-25c6430dfe85" />
+
+<img width="2429" height="1216" alt="image" src="https://github.com/user-attachments/assets/c368b313-c787-4494-a40b-c3058a85c1de" />
+
+## S3 Perfomance
+
+<img width="2347" height="1268" alt="image" src="https://github.com/user-attachments/assets/e67aa9c5-894e-4208-871c-6b599d1958db" />
+
+<img width="2432" height="1188" alt="image" src="https://github.com/user-attachments/assets/f47e43ba-c178-44fa-a271-3659a0b25530" />
+
+<img width="2387" height="1181" alt="image" src="https://github.com/user-attachments/assets/55e7e9d3-e095-4f79-a9fa-7845b147c850" />
+
+## S3 Batch Operations
+
+<img width="1193" height="676" alt="image" src="https://github.com/user-attachments/assets/9899de9c-eab7-4350-b654-3f96fab232c2" />
 
 ## S3 Access Logs
 
