@@ -1344,7 +1344,11 @@ Objects cannot be made publicly accessible. Any Access of data requires a retrie
 > Sort of waterfall between the S3 Storage Classes
 > 
 
-![Untitled](img/Untitled%2024.png)
+<img width="2419" height="1147" alt="image" src="https://github.com/user-attachments/assets/24c1f76d-212a-47d0-bdef-6f8a95bbd575" />
+
+## S3 Lifecycle Rules
+
+<img width="2342" height="1185" alt="image" src="https://github.com/user-attachments/assets/da488f69-a227-4656-a547-8d5a217f6ea8" />
 
 ## S3 Replication
 
