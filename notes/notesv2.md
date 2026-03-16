@@ -4276,6 +4276,14 @@ Kubernetes as a Service (KaaS?)*
 
 ![Untitled](img/Untitled%20147.png)
 
+## SQS vs SNS vs Kinesis
+
+<img width="2420" height="1239" alt="image" src="https://github.com/user-attachments/assets/df6d7a35-f837-4387-8331-e4dfd7aab15e" />
+
+## Kinesis Data Streams vs Amazon Data Firehose 
+
+<img width="1174" height="606" alt="image" src="https://github.com/user-attachments/assets/ba58364c-9b06-42c3-a7a1-e12c130a7a79" />
+
 ## Amazon MQ
 
 > *AmazonMQ is an AWS implementation of Apache ActiveMQ*
@@ -4311,6 +4319,8 @@ Kubernetes as a Service (KaaS?)*
 - MQ if you need to migrate from an existing system with little to no application change
 - MQ if APIs such as JMS or protocols such as AMQP, MQTT, OpenWite and STOMP are needed
 - **Remember you ned private networking for MQ**
+
+<img width="1159" height="673" alt="image" src="https://github.com/user-attachments/assets/61dedf12-7503-4d88-84ab-405c31ec6a6c" />
 
 ## AWS Lambda
 
