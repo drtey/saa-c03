@@ -3972,6 +3972,8 @@ Keys never leave KMS - Provides FIPS 140-2 (L2)**
 - **If you want to use containers, but need to manage the host the container is running on - EC2!**
     - Keep overhead and flexibility
 
+<img width="1235" height="674" alt="image" src="https://github.com/user-attachments/assets/f6d60275-da6e-47c3-a3e3-a3e57e7d8383" />
+
 ![Untitled](img/Untitled%2066.png)
 
 ### Fargate Mode
@@ -3984,6 +3986,8 @@ Keys never leave KMS - Provides FIPS 140-2 (L2)**
 - **Tasks *injected* into the VPC - given ENI**
 - A lot of customizability
 - **You only pay for the containers you are using based on the resources you consume!**
+
+<img width="1172" height="674" alt="image" src="https://github.com/user-attachments/assets/bcdc4065-3f41-482d-aab6-7c96a59db1b9" />
 
 ### EC2 vs ECS (EC2) vs Fargate
 
