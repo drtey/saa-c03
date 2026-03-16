@@ -3998,6 +3998,34 @@ Keys never leave KMS - Provides FIPS 140-2 (L2)**
 - **Small/burst** workloads - **Fargate**
 - **Batch/periodic** workloads - **Fargate**
 
+## Amazon ECS - IAM Roles for ECS
+
+<img width="1250" height="611" alt="image" src="https://github.com/user-attachments/assets/f85e52bf-6663-4d43-9105-9c69fc8af3de" />
+
+## Load Balancer Integrations
+
+<img width="1225" height="646" alt="image" src="https://github.com/user-attachments/assets/7caf8260-feb5-440a-87d7-1b887cac7865" />
+
+## Data Volumes EFS
+
+<img width="1192" height="657" alt="image" src="https://github.com/user-attachments/assets/a76e40b2-c411-4b6c-b6a4-a0b2fc60e108" />
+
+## ECS Service Auto Scaling
+
+<img width="1165" height="649" alt="image" src="https://github.com/user-attachments/assets/b29d695c-d01a-4e65-afd8-754b6396919e" />
+
+<img width="1204" height="657" alt="image" src="https://github.com/user-attachments/assets/9d1051ef-e86f-4717-97f1-4a232616044b" />
+
+## ECS Architectures
+
+<img width="1155" height="652" alt="image" src="https://github.com/user-attachments/assets/28ffe329-5fac-4cc8-8ee4-982223def1fc" />
+
+<img width="1169" height="568" alt="image" src="https://github.com/user-attachments/assets/243f2bfc-e688-45d1-a25c-64d85004a26b" />
+
+<img width="1169" height="568" alt="image" src="https://github.com/user-attachments/assets/43be9464-be40-4934-b69b-13dbf012e651" />
+
+<img width="1169" height="661" alt="image" src="https://github.com/user-attachments/assets/b04aabda-4a96-4c9b-8fb8-3be81bbf2bd6" />
+
 ## Elastic Container Registry (ECR)
 
 - Managed **container image registry** service
@@ -4016,7 +4044,8 @@ Keys never leave KMS - Provides FIPS 140-2 (L2)**
 - **Events →** EventBridge
 - Replication
     - Cross-region AND Cross-account
-    - 
+
+<img width="1169" height="661" alt="image" src="https://github.com/user-attachments/assets/be36d58f-0ab7-4bb4-8323-26bea6a1ba80" />
 
 ## Kubernetes 101
 
