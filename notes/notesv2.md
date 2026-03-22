@@ -945,6 +945,67 @@ CloudWatch Logs is a public service and can also be utilized in an on-premises e
 
 ![Untitled](img/Untitled%209.png)
 
+### CloudWatch Logs - Sources
+
+- SDK, CloudWatch Logs Agent, CloudWatch Unified Agent
+- Elastic Beanstalk: collection of lofs from application
+- ECS: collection from containers
+- ASW Lambda: Collection from frunction logs
+- VPC Flow Logs: VPC specific logs
+- API Gateway
+- CloudTrail based on filter
+- Route53: Log DNS queries
+
+<img width="897" height="506" alt="image" src="https://github.com/user-attachments/assets/c2fcc140-c935-4a2c-b5e6-0b96ee40a434" />
+
+### CloudWatch Logs - Insights
+
+- Search and analyze log data stored in ClouWatch logs
+- Example: find a specific IP inside a log, count occurrences of "ERROR" in your logs...
+- Provides a purpose-built query language
+   - Automatically discovers fields from AWS services and JSON log events
+   - Fetch desired event fields, filter based on coditions, calculate aggregate statistics, sort events, limit number of events...
+   - Can save queries and add them to CloudWatch Dashboards
+- Can query multiple Log Groups in different AWS accounts
+- It's a query engine, not a real-time engine
+
+<img width="355" height="555" alt="image" src="https://github.com/user-attachments/assets/36002698-a09c-4fbd-9c66-b173970db8d8" />
+
+### CloudWatch Logs - S3 Export
+
+- Log data can take up to 12 hours to become available for export
+- The API call is CreateExportTask
+- Not near-real time or real-time... use logs Subscriptions instead
+  
+### CloudWatch Logs - S3 Export
+
+- Get a real-time log events from CloudWatch Logs fro processing and analysis
+- Send to Kinesis Data Streams, Kinesis Data Firehose or Lambda
+- Subscription Filter - filter which logs are events delivered to your destination
+
+<img width="1150" height="374" alt="image" src="https://github.com/user-attachments/assets/6b79ad74-210f-424c-ae97-70498f32422d" />
+
+
+## CloudWatch Metrics 
+
+- CloudWatch provides metrics for every services in AWS
+- Metric is a variable to monitor(CPUUtilization, Networkkln...)
+- Metrics belong to namespaces
+- Dimension is an attribute of a metric (instance id, environment, etc...)
+- Up to 30 dimensions per metric
+- Metric have timestamps
+- Can create a CloudWatch dashboards of metrics
+- Can create CloudWatch Custom Metrics
+
+### CloudWatch Metric Streams
+- Continually stream CloudWatch metrics to a destination of your choice with near-real-time delivery and low latency.
+	- Amazon KinesisData Firehose (and then its destinations)
+ 	- 3rd party service provider: Datadog, Dynatrace, New Relic, Splunk, Sumo Logic...
+- Option to filter metrics to only stream a subset of them
+
+<img width="490" height="561" alt="image" src="https://github.com/user-attachments/assets/084a1800-0fa7-4ce6-9dfe-29eb21923dfc" />
+
+
 ## CloudTrail Essentials
 
 ### CloudTrail Basic
@@ -1024,6 +1085,41 @@ AWS Control Tower orchestration extends the capabilities of AWS Organizations. T
 - Can be fully integrated with a business SDLC (Software Development Life Cycle)
 
 
+## CloudWatch Agent & CloudWatch Logs Agent
+
+### CloudWatch Logs for EC2 
+
+- By default, no logs from your EC2 machine will go to CloudWatch
+- You need to run a CloudWatch agent on EC2 to push the log files you want
+- Make sure IAM permissions are correct
+- The CloudWatch log agent can be setup on-premises too
+
+<img width="464" height="485" alt="image" src="https://github.com/user-attachments/assets/926472d2-3435-48d6-b849-d9756b743dfc" />
+
+### Cloudwatch Logs Agent & Unified Agent
+
+- For virtual servers (EC2 instances, on-premises servers...)
+- CloudWatch Logs Agent
+  	- Old version of the agent
+ 	- Can only send to CloudWatch Logs
+- CloudWatch Unified Agent
+  	- Collect additional system-level metrics such as RAM, processes, etc...
+  	- Collect logs to send to CloudWatch Logs
+  	- Centralized configuration using SSM Parameter Store
+ 
+### CloudWatch Unified Agent - Metrics
+
+> *Collected directly on your Linux server / EC2 instance*
+
+- CPU (active, guest, idle, system, user, steal)
+- Disk metrics (free, used, total), Disk IO (writes, reads, bytes, iops)
+- RAM (free, inactive, used, total, cached)
+- Netstat (number of TCP and UDP connections, net packets, bytes)
+- Processes (total, dead, bloqued, idle, running, sleep)
+- Swap Space (freee, used, used %)
+
+- Reminder: out-of-the box metrics for EC2 - disk, CPU, network (high level)
+`	
 
 # 🖥 Elastic Compute Cloud (EC2) Basics
 
