@@ -928,6 +928,87 @@ arn:aws:s3:::catgifs/* # Objects in bucket
 
 ![Untitled](img/Untitled%208.png)
 
+## AWS Directory Service
+
+> *The Directory service is a product which provides managed directory service instances within AWS*
+> 
+> 
+> *it functions in three modes*
+> 
+> - *Simple AD - An implementation of Samba 4 (compatibility with basics AD functions)*
+> - *AWS Managed Microsoft AD - An actual Microsoft AD DS Implementation*
+> - *AD Connector which proxies requests back to an on-premises directory.*
+
+### What’s a Directory?
+
+- Stores **objects** (e.g. Users, Groups, Computers, Servers, File Shares) with a **structure** (domain/tree)
+- Multiple trees can be grouped into a **forest**
+- Commonly used in **Windows Environments**
+- Sign-in to multiple devices with the same username/password provides centralized management for assets
+    - Microsoft Active Directory Domain Services (**AD DS**)
+- AF FD most popular, open-source alternatives (**SAMBA)**
+
+### What is Directory Service?
+
+- **AWS Managed** implementation
+- Runs within a **VPC**
+- To implement **HA** - deploy into **multiple AZs**
+- Some AWS services NEED a directory, e.g. **Amazon Workspaces**
+- Can be **isolated** or **integrated** with existing **on-premises system**
+    - Or act as a ***proxy*** back to on-premises
+ 
+
+## AWS Control Tower
+
+> *AWS Control Tower offers a straightforward way to set up and govern an AWS multi-account environment, following prescriptive best practices. AWS Control Tower orchestrates the capabilities of several other [AWS services](https://docs.aws.amazon.com/controltower/latest/userguide/integrated-services.html), including AWS Organizations, AWS Service Catalog, and AWS IAM Identity Center (successor to AWS Single Sign-On), to build a landing zone in less than an hour. Resources are set up and managed on your behalf.
+
+AWS Control Tower orchestration extends the capabilities of AWS Organizations. To help keep your organizations and accounts from drift, which is divergence from best practices, AWS Control Tower applies preventive and detective controls (guardrails). For example, you can use guardrails to help ensure that security logs and necessary cross-account access permissions are created, and not altered.*
+> 
+
+![Untitled](img/Untitled%2011.png)
+
+- Quick and easy setup of multi-account environment
+- Orchestrates other AWS services to provide this functionality
+- Organizations, IAM Identity Center, CloudFormation, Config and more
+- Landing Zone - multi-account environment
+- SSO/ID Federation, Centralized Logging and Auditing
+- Guard Rails - Detect/Mandate rules/standard across all accounts
+- Account Factory - Automates and standardizes new account creation
+- Dashboard - single page oversight of the entire environment
+
+### Landing Zone
+
+- **Well Architected** multi-account environment. **Home region.**
+- Built with AWS Organizations, AWS Config, CloudFormation
+- Security **OU (Organizational Unit)** - Log Archive and Audit Accounts (CloudTrail & Config Logs)
+- Sandbox OU - Test/less rigid security
+- You can create other OU’s and Accounts
+- IAM Identity Center (AWS SSO) - SSO, multiple-accounts, ID Federation
+- Monitoring and Notifications - CloudWatch and SNS
+- End User account provisioning via Service Catalog
+
+### Guard Rails
+
+- Guardrails are rules for multi-account governance
+- **Mandatory, strongly recommended** or **elective**
+- **Preventive -** Stop you doing things (AWS ORG SCP)
+- Enforced or not enabled
+    - i.e. allow or deny regions or disallow bucket policy changes
+- Detective - compliance checks (AWS CONFIG Rules)
+- Clear, in violation or not enabled
+- Detect CloudTrail enabled or EC2 Public IPv4
+
+### Account Factory
+
+- **Automated Account Provisioning**
+- Cloud admins or end users (with appropriate permissions)
+- **Guardrails** - automatically added
+- Account admin given to a named user (IAM Identity Center)
+- Account & network standard configuration
+- Account can be closed or repurposed
+- Can be fully integrated with a business SDLC (Software Development Life Cycle)
+  
+
 ## CloudWatch Logs
 
 > *CloudWatch Logs is a service which can accept logging data, store it and monitor it.
@@ -1033,56 +1114,6 @@ CloudWatch Logs is a public service and can also be utilized in an on-premises e
     - Only these logs global
 - **NOT REALTIME** - There is a delay
     - Typical 15 minutes ❗
-
-## AWS Control Tower
-
-> *AWS Control Tower offers a straightforward way to set up and govern an AWS multi-account environment, following prescriptive best practices. AWS Control Tower orchestrates the capabilities of several other [AWS services](https://docs.aws.amazon.com/controltower/latest/userguide/integrated-services.html), including AWS Organizations, AWS Service Catalog, and AWS IAM Identity Center (successor to AWS Single Sign-On), to build a landing zone in less than an hour. Resources are set up and managed on your behalf.
-
-AWS Control Tower orchestration extends the capabilities of AWS Organizations. To help keep your organizations and accounts from drift, which is divergence from best practices, AWS Control Tower applies preventive and detective controls (guardrails). For example, you can use guardrails to help ensure that security logs and necessary cross-account access permissions are created, and not altered.*
-> 
-
-![Untitled](img/Untitled%2011.png)
-
-- Quick and easy setup of multi-account environment
-- Orchestrates other AWS services to provide this functionality
-- Organizations, IAM Identity Center, CloudFormation, Config and more
-- Landing Zone - multi-account environment
-- SSO/ID Federation, Centralized Logging and Auditing
-- Guard Rails - Detect/Mandate rules/standard across all accounts
-- Account Factory - Automates and standardizes new account creation
-- Dashboard - single page oversight of the entire environment
-
-### Landing Zone
-
-- **Well Architected** multi-account environment. **Home region.**
-- Built with AWS Organizations, AWS Config, CloudFormation
-- Security **OU (Organizational Unit)** - Log Archive and Audit Accounts (CloudTrail & Config Logs)
-- Sandbox OU - Test/less rigid security
-- You can create other OU’s and Accounts
-- IAM Identity Center (AWS SSO) - SSO, multiple-accounts, ID Federation
-- Monitoring and Notifications - CloudWatch and SNS
-- End User account provisioning via Service Catalog
-
-### Guard Rails
-
-- Guardrails are rules for multi-account governance
-- **Mandatory, strongly recommended** or **elective**
-- **Preventive -** Stop you doing things (AWS ORG SCP)
-- Enforced or not enabled
-    - i.e. allow or deny regions or disallow bucket policy changes
-- Detective - compliance checks (AWS CONFIG Rules)
-- Clear, in violation or not enabled
-- Detect CloudTrail enabled or EC2 Public IPv4
-
-### Account Factory
-
-- **Automated Account Provisioning**
-- Cloud admins or end users (with appropriate permissions)
-- **Guardrails** - automatically added
-- Account admin given to a named user (IAM Identity Center)
-- Account & network standard configuration
-- Account can be closed or repurposed
-- Can be fully integrated with a business SDLC (Software Development Life Cycle)
 
 
 ## CloudWatch Agent & CloudWatch Logs Agent
@@ -6305,35 +6336,6 @@ Reduce admin overhead*
 - Up to **100PB per snowmobile**
 - Not economical for **multi-site** (unless huge) or sub **10PB** ❗
 - LITERALLY A TRUCK
-
-## AWS Directory Service
-
-> *The Directory service is a product which provides managed directory service instances within AWS*
-> 
-> 
-> *it functions in three modes*
-> 
-> - *Simple AD - An implementation of Samba 4 (compatibility with basics AD functions)*
-> - *AWS Managed Microsoft AD - An actual Microsoft AD DS Implementation*
-> - *AD Connector which proxies requests back to an on-premises directory.*
-
-### What’s a Directory?
-
-- Stores **objects** (e.g. Users, Groups, Computers, Servers, File Shares) with a **structure** (domain/tree)
-- Multiple trees can be grouped into a **forest**
-- Commonly used in **Windows Environments**
-- Sign-in to multiple devices with the same username/password provides centralized management for assets
-    - Microsoft Active Directory Domain Services (**AD DS**)
-- AF FD most popular, open-source alternatives (**SAMBA)**
-
-### What is Directory Service?
-
-- **AWS Managed** implementation
-- Runs within a **VPC**
-- To implement **HA** - deploy into **multiple AZs**
-- Some AWS services NEED a directory, e.g. **Amazon Workspaces**
-- Can be **isolated** or **integrated** with existing **on-premises system**
-    - Or act as a ***proxy*** back to on-premises
 
 ### Simple AD Mode Architecture
 
