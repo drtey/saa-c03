@@ -1119,7 +1119,111 @@ AWS Control Tower orchestration extends the capabilities of AWS Organizations. T
 - Swap Space (freee, used, used %)
 
 - Reminder: out-of-the box metrics for EC2 - disk, CPU, network (high level)
-`	
+
+
+## CloudWatch Alarms
+
+- Alarms are used to trigger notificacions for any metric
+- Various options (sampling, %, max, min, etc...)
+- Alarm States:
+  - OK
+  - INSUFFICIENT_DATA
+  - ALARM
+- Period:
+  - Length of time in seconds to evaluate the metric
+  - High resolution custom metrics: 10 sec, 30 sec or multiples of 60 sec
+
+### CloudWatch Alarms Targets
+
+- Stop, terminate, reboot or recover an EC2 instance
+- Trigger auto scaling action
+- Send notification to SNS (from which you can do pretty much anything)
+
+### CloudWatch Alarms - Composite Alarms
+
+- CloudWatch Alarms are on a single metric
+- CloudWatch Alarms are monitoring the states of multiple other alarms
+- AND and OR conditions
+- Helpful to reduce "alarm noise" by creating complex composite alarms
+
+<img width="989" height="309" alt="image" src="https://github.com/user-attachments/assets/f3c6c21b-9ad2-4046-8f69-9ca88393896c" />
+
+### EC2 Instance Recovery
+
+- Status check:
+	- Instance status = check the EC2 VM
+   	- System status = check the underlying hardware
+   	- Attached EBS status = check attached EBS volumes
+ 
+   	  <img width="968" height="266" alt="image" src="https://github.com/user-attachments/assets/2733ac86-3222-4501-9400-ec5b75542dc7" />
+	  
+- Recovery: Same Private, Public, Elastic IP, metadata, placement group
+
+
+## CloudWatch Insights and Operational visibility
+
+<img width="1167" height="505" alt="image" src="https://github.com/user-attachments/assets/df00024b-fcad-477c-bcfb-040a6afa30f9" />
+
+### CloudWatch Container Insights
+
+- Collect, aggregate, summarize metrics and logs from containers
+- Available for containers on...
+  	- Amazon Elastic Container Service (Amazon ECS)
+  	- Amazon Elastic Kubernetes Services (Amazon EKS)
+  	- Kubernetes Platforms on EC2
+  	- Fargate (both for EC2 and EKS)
+- In Amazon EKS and Kubernetes, CloudWatch Insights is using a containerized version of the CloudWatch Agent to discover containers
+
+<img width="426" height="572" alt="image" src="https://github.com/user-attachments/assets/a70886a7-4a90-4d93-b17a-d9a2f441bd57" />
+
+### CloudWatch Lambda Insights
+
+- Monitoring and troubleshooting solution for serverless applications running on AWS Lambda
+- Collects, aggregates, and summarizes system-level metrics including CPU time, memory, disk, and network
+- Collects, aggregates, and summarizes diagnostic information such as cold starts and Lambda worker shutdowns
+- Lambda Insights is provided as a Lambda Layer
+
+### CloudWatch Contributor Insights
+
+- Analyze log data and create time series that display contributor data
+	- See metrics about the top-N contributors
+    - The total number of unique contributors, and ther usage
+- This helps you find top talkers and undertstand who or what is impacting system performance
+- Works for any AWS-generated logs (VPC, DNS, etc...)
+- For example, you cand find bad hosts, identify the heaviest network users, or finde the URLs that generate the most errors
+- You can build your rules from scratch, or you can also use sample rules that AWS has created - leverages your CLoudWatch Logs
+- CloudWatch also provides built-in rules that you can use to analyze metrics from other AWS services
+
+### CloudWatch Application Insights
+
+- Provides automated dashboards that show potential problems with monitored applications, to help isolate on going issues
+- Your applications run on Amazon EC@ instances with select technologies only (Java, .NET, Microsoft IIS Web Server, databases...)
+- You can use other AWS resources such as Amazon EBS, RDS, ELB, ASG, Lambda, SQS, DynamoDB, S3 Bucket, ECS, EKS, SNS, API Gateway
+- Powered by SageMaker
+- Enhanced visibility into your application health to reduce the time it will take you to troubleshoot and repair your applications
+- Findings and alerts are sent to Amazon EventBridge and SSM OpsCenter
+
+
+## CloudTrail vs CloudWatch vs Config
+
+- CloudWatch
+  - Perfomance monitoring (metrics, CPU, etc...) & dashboards
+  - Events & Alerting
+  - Log Aggregation & Analysis
+
+- CloudTrail
+  - Record API calls made within your Account by everyone
+  - Can define trails fro specific resources
+  - Global Service
+
+- Config
+  - Record configuration changes
+  - Evaluate resources against compliance rules
+  - Get timeline of changes and compliance
+ 
+<img width="1131" height="609" alt="image" src="https://github.com/user-attachments/assets/544da342-1e90-4f22-b21c-1c58e9a03697" />
+
+
 
 # 🖥 Elastic Compute Cloud (EC2) Basics
 
