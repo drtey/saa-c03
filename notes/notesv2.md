@@ -885,6 +885,53 @@ arn:aws:s3:::catgifs/* # Objects in bucket
     - Good: Bob cannot assign roles with permissions that exceeds his own
     
 
+
+## IAM Permission Boundaries
+
+- Una **permission boundary** es una politica gestionada que define el **maximo de permisos** que una identity policy puede conceder a un usuario/rol IAM
+- No concede permisos por si sola - actua como limite superior
+- **Permisos efectivos = interseccion** de la identity policy y la permission boundary
+- Uso tipico: delegar la creacion de usuarios/roles a desarrolladores sin permitirles escalar privilegios (privilege escalation prevention)
+
+## IAM Identity Center (AWS SSO)
+
+- Sucesor de AWS Single Sign-On; acceso centralizado a **multiples cuentas AWS y aplicaciones SaaS**
+- Integra con: AWS Organizations, Active Directory (via AD Connector o Managed AD), IdPs externos via SAML 2.0
+- **Permission Sets** - colecciones de politicas IAM aplicadas a usuarios/grupos en cuentas especificas
+- Un usuario puede acceder a multiples cuentas con una sola credencial
+- Registro de sesiones en CloudTrail
+- **Diferencia clave:** IAM = acceso dentro de una cuenta; IAM Identity Center = acceso **entre cuentas** con SSO
+
+## Attribute-Based Access Control (ABAC)
+
+- Estrategia de autorizacion que define permisos basados en **etiquetas (tags)** de los recursos e identidades
+- Politicas usan condiciones  y 
+- **Ventaja:** Escalar permisos sin crear multiples politicas - una sola politica funciona para todos los recursos con el mismo tag
+- Ejemplo:  permite acceso solo a instancias con ese tag
+
+## AWS Resource Access Manager (RAM)
+
+> *Comparte recursos AWS de forma segura entre cuentas dentro de una AWS Organization o con cuentas especificas.*
+
+**Recursos compartibles (ejemplos clave para examen):**
+- Subnets de VPC (Transit Gateway, subnets)
+- AWS Transit Gateways
+- Route 53 Resolver Rules
+- License Manager configurations
+- Aurora DB Clusters
+- AWS Glue Tables / Data Catalog
+- AWS Network Firewall policies
+
+**Como funciona:**
+1. Propietario crea un **Resource Share** con los recursos
+2. Invita cuentas o aplica a toda la Organization/OU
+3. Los recursos aparecen en la cuenta receptora como propios (sin copiarlos)
+
+**Puntos clave examen:**
+- **No hay coste adicional** por RAM - pagas solo los recursos compartidos
+- Preferir RAM a crear copias del recurso entre cuentas
+- Subnets compartidas via RAM: las instancias en cuentas receptoras comparten la subnet pero cada cuenta gestiona sus propios recursos en ella
+- Con AWS Organizations habilitado, se puede compartir **sin invitaciones** (auto-aceptacion)
 ## AWS Organizations
 
 > *Suitable for organization with multiple AWS accounts*
@@ -2106,7 +2153,41 @@ Relogin
 - Resource usage consumes savings plan commitment at the reduced savings plan rate
 - Beyond your commitment **on-demand is used**
 
-## Instance Status Checks & Auto Recovery
+
+### Savings Plans - Tipos
+
+| Tipo | Flexibilidad | Aplica a |
+|---|---|---|
+| **Compute Savings Plans** | Maxima - cualquier region, familia, OS, tenancy | EC2, Fargate, Lambda |
+| **EC2 Instance Savings Plans** | Bloqueado a familia de instancia + region | Solo EC2 |
+| **SageMaker Savings Plans** | Especifico SageMaker | SageMaker |
+
+Compromiso: **1 o 3 anos**; pago todo por adelantado / parcial / sin adelanto.
+Compute SP tiene mas flexibilidad pero menor descuento maximo que EC2 Instance SP.
+## AWS Cost Explorer
+- **Free** tool to visualize, understand, and manage AWS costs and usage over time
+- View data for up to the **last 12 months**; forecast up to **12 months** ahead (requires ~5 weeks of historical data)
+- Available as an **API** for programmatic access
+- Create **custom reports** by service, account, tag, region, purchase option
+- **Rightsizing Recommendations**: identifies EC2 instances that are over-provisioned
+- **Savings Plans recommendations** integrated into Cost Explorer
+## AWS Budgets
+- Set **custom cost, usage, RI, or Savings Plans budgets** with alerts
+- **5 budget types**:
+  | Type | What it tracks |
+  |---|---|
+  | **Cost** | Dollar spend |
+  | **Usage** | Service usage (GB, hours, etc.) |
+  | **RI Utilization** | % of purchased RIs being used |
+  | **RI Coverage** | % of usage covered by RIs |
+  | **Savings Plans Utilization/Coverage** | % commitment used / % usage covered |
+- **Alerts**: email, SNS; can trigger **automated actions** (apply IAM policy, target SCP, stop EC2/RDS)
+- **Free tier**: 2 budgets free; $0.02/day per additional budget
+## AWS Cost Allocation Tags
+- Tag resources ÔåÆ activate tags in Billing console ÔåÆ appear in **Cost Explorer** and billing reports
+- **Two types**: AWS-generated (e.g., `aws:createdBy`) and **user-defined**
+- Tags must be **activated** to show in cost reports (not retroactive)
+- Use with **Resource Groups** to group and track resources by project/team## Instance Status Checks & Auto Recovery
 
 > *With instance status monitoring, you can quickly determine whether Amazon EC2 has detected any problems that might prevent your instances from running applications. Amazon EC2 performs automated checks on every running EC2 instance to identify hardware and software issues. You can view the results of these status checks to identify specific and detectable problems.*
 > 
@@ -2114,7 +2195,7 @@ Relogin
 > *You can create an Amazon CloudWatch alarm that monitors an Amazon EC2 instance and automatically recovers the instance if it becomes impaired due to an underlying hardware failure or a problem that requires AWS involvement to repair. Terminated instances cannot be recovered. A recovered instance is identical to the original instance, including the instance ID, private IP addresses, Elastic IP addresses, and all instance metadata*
 > 
 
-### Instance Status Checks
+## Instance Status Checks
 
 - Every EC2 instance have 2 status check
 - **First**
@@ -2845,7 +2926,51 @@ Reasons to NOT host DB on EC2:
 - **Replication** - skills, setup time, monitoring & effectiveness
 - **Performance** - AWS invest time into optimization and features
 
-## Relational Database Service (RDS)
+#
+## AWS Migration Strategies - The 7 Rs
+
+| R | Alias | Definicion | Esfuerzo |
+|---|---|---|---|
+| **Rehost** | Lift & Shift | Mover tal cual a EC2/cloud sin cambios | Bajo |
+| **Replatform** | Lift, Tinker & Shift | Optimizaciones menores sin cambiar arquitectura core | Medio |
+| **Refactor / Re-architect** | Re-architect | Redisenar como cloud-native (monolito -> microservicios) | Alto |
+| **Repurchase** | Drop & Shop | Reemplazar con SaaS (e.g., CRM propio -> Salesforce) | Medio |
+| **Retain** | Revisit | Mantener on-premises por ahora | Ninguno |
+| **Retire** | - | Descomisionar - aplicacion ya no necesaria | Ninguno |
+| **Relocate** | - | Mover infraestructura sin nuevo hardware (e.g., VMware Cloud on AWS) | Bajo |
+
+**Patron de examen:**
+- Migrar ASAP con minimos cambios -> **Rehost**
+- Mover DB a servicio gestionado -> **Replatform**
+- Mover a SaaS -> **Repurchase**
+- Redisenar como microservicios -> **Refactor**
+- Compliance impide migracion -> **Retain**
+- Ya no se necesita -> **Retire**
+- Mover workloads VMware -> **Relocate**
+
+## AWS Elastic Disaster Recovery (DRS)
+
+> *Servicio de DR continuo que minimiza downtime y perdida de datos replicando servidores on-premises o en otras nubes a AWS.*
+
+- Replicacion continua a nivel de bloque hacia AWS (RPO de segundos, RTO de minutos)
+- Agente instalado en servidores fuente; replica continuamente a una subred de staging en la cuenta AWS
+- En caso de desastre: lanzar instancias de recuperacion completamente aprovisionadas en minutos
+- **No interrumpe** la carga de trabajo fuente durante la replicacion
+- Soporta origen: on-premises, otras nubes (GCP, Azure), otras regiones AWS
+- Sustituye a **CloudEndure Disaster Recovery**
+
+## Disaster Recovery Strategies (RTO/RPO)
+
+**RPO** (Recovery Point Objective): maximo tiempo de perdida de datos aceptable
+**RTO** (Recovery Time Objective): maximo tiempo para restaurar el servicio
+
+| Estrategia | RPO | RTO | Coste | Descripcion |
+|---|---|---|---|---|
+| **Backup & Restore** | Horas | Horas | Minimo | Backups a S3; restaurar desde cero en desastre |
+| **Pilot Light** | Minutos | 10s min | Bajo | Nucleo minimo siempre activo (BD replicada); escalar el resto cuando haga falta |
+| **Warm Standby** | Segundos | Minutos | Medio | Version reducida del entorno completo siempre corriendo; escalar a produccion |
+| **Multi-site Active/Active** | Casi cero | Casi cero | Alto | Entorno completo corriendo en varios sitios; trafico repartido; failover instantaneo |
+# Relational Database Service (RDS)
 
 > *The Relational Database Service (RDS) is a Database(server) as a service product from AWS which allows the creation of managed databases instances.*
 > 
@@ -3676,7 +3801,24 @@ SQL-Like statement*
 
 ![Untitled](img/Untitled%2029.png)
 
-## Key Management Service (KMS)
+## S3 Access Points
+- **Named network endpoints** attached to a bucket ÔÇö each with its own DNS name and access policy
+- Simplify access control for buckets with many different users/applications
+- Each access point policy **restricts what data can be accessed** (prefix, actions)
+- Can be restricted to a **specific VPC** (via VPC Origin) ÔÇö traffic never leaves AWS network
+- **Bucket policy** must allow delegated access to access points (`s3:DataAccessPointArn` condition)
+## S3 Object Lambda
+- Add code to process objects **before returning them** to the caller ÔÇö no need to store separate versions
+- Works by attaching a **Lambda function** to a **S3 Object Lambda Access Point**
+- Use cases: redact PII, convert data formats (XMLÔåÆJSON), compress/decompress, watermark images
+- Architecture: App ÔåÆ S3 Object Lambda AP ÔåÆ Lambda ÔåÆ S3 (fetches original) ÔåÆ Lambda transforms ÔåÆ returns to App
+## S3 Multi-Region Access Points
+- Single **global endpoint** that routes requests to the **nearest S3 bucket** in multiple regions
+- Uses **AWS Global Accelerator** under the hood for network routing
+- Supports **active-active** (multi-region) and **active-passive** (failover) configurations
+- Works with **S3 Cross-Region Replication** to keep buckets in sync
+- **Failover controls**: shift traffic between regions using routing preferences (0ÔÇô100%)
+- Reduces latency for globally distributed applications## Key Management Service (KMS)
 
 > **Regional & Public Service
 Create, Store and Manage Keys
@@ -4544,6 +4686,34 @@ Kubernetes as a Service (KaaS?)*
 
 <img width="2420" height="1239" alt="image" src="https://github.com/user-attachments/assets/df6d7a35-f837-4387-8331-e4dfd7aab15e" />
 
+
+### Kinesis Data Streams - Shard Math & Limits
+
+**Por shard (memorizar):**
+| Direction | Limit |
+|---|---|
+| **Write** | 1 MB/s OR 1,000 records/s (el primero que se alcance) |
+| **Read (standard)** | 2 MB/s **compartido** entre todos los consumers |
+| **Read (Enhanced Fan-Out)** | 2 MB/s **dedicado por consumer registrado** |
+
+**Formula shards necesarios:**
+
+- Ejemplo: 5 MB/s a 3,000 records/s -> MAX(5, 3) = **5 shards**
+
+**Retención:** 24h por defecto; hasta **365 dias** (coste adicional)
+
+**Enhanced Fan-Out (EFO):**
+- Push-based via HTTP/2; latencia ~**70ms** (vs ~200ms standard polling)
+- Coste adicional: por consumer-shard-hora + por GB recuperado
+
+**Ordering:** garantizado **por shard** - usa partition key para enrutar registros relacionados al mismo shard
+
+**Max record size:** 1 MB
+
+**Kinesis vs SQS vs SNS - regla rapida:**
+- Multiples consumers leyendo los **mismos datos** / replay -> **Kinesis**
+- Workers desacoplados (un consumer por mensaje) -> **SQS**
+- Notificaciones broadcast -> **SNS**
 ## Kinesis Data Streams vs Amazon Data Firehose 
 
 <img width="1174" height="606" alt="image" src="https://github.com/user-attachments/assets/ba58364c-9b06-42c3-a7a1-e12c130a7a79" />
@@ -4672,6 +4842,51 @@ Kubernetes as a Service (KaaS?)*
 
 ![Untitled](img/Untitled%20132.png)
 
+
+### Lambda Concurrency
+
+**Tipos:**
+| Tipo | Descripcion |
+|---|---|
+| **Unreserved** | Capacidad compartida de la cuenta (default) |
+| **Reserved** | Garantiza X ejecuciones simultaneas para una funcion; resto de funciones no la pueden usar |
+| **Provisioned** | Pre-inicializa N entornos - elimina cold starts; ideal para latencia critica |
+
+- Limite default cuenta: **1,000 ejecuciones concurrentes** por region (ajustable via soporte)
+- Reserved concurrency = 0 -> funcion **deshabilitada** efectivamente
+- Throttle -> **429 TooManyRequests**
+
+### Lambda Layers
+
+- Paquete ZIP que contiene **librerias, dependencias o runtime personalizado**
+- Hasta **5 layers por funcion**; tamano maximo descomprimido 250 MB (funcion + layers)
+- Compartibles entre funciones y cuentas
+- Evita empaquetar dependencias repetidamente en cada funcion
+
+### Lambda@Edge vs CloudFront Functions
+
+| Caracteristica | CloudFront Functions | Lambda@Edge |
+|---|---|---|
+| **Runtime** | JavaScript (ES5) | Node.js, Python |
+| **Triggers** | Viewer Request/Response only | Viewer + Origin Request/Response |
+| **Tiempo ejecucion max** | 1 ms | 5s (viewer) / 30s (origin) |
+| **Memoria max** | 2 MB | 128 MB - 10 GB |
+| **Acceso a red/filesystem** | No | Si |
+| **Ubicacion ejecucion** | Edge location (150+) | Regional edge caches (~13) |
+| **Precio** | Mas barato (1/6 del costo) | Mas caro |
+| **Casos de uso** | Header manipulation, URL rewrite, A/B test simple | Auth OAuth, cuerpo de request, acceso a BD/servicios AWS |
+
+### Lambda Destinations
+
+- Envia el resultado de invocaciones **asincronas** a un destino segun exito/fallo
+- Destinos soportados: **SQS, SNS, Lambda, EventBridge**
+- Preferible a DLQ (Dead Letter Queue) porque incluye el contexto completo del evento
+
+### Cold Start vs Warm Start
+
+- **Cold start:** AWS provisiona un nuevo entorno de ejecucion (descarga codigo, inicializa runtime) -> latencia adicional
+- **Warm start:** El entorno ya existe y esta disponible -> sin latencia adicional
+- **Provisioned Concurrency** elimina cold starts pre-calentando los entornos
 ## CloudWatchEvents and EventBridge
 
 > *CloudWatch Events and EventBridge have visibility over events generated by supported AWS services within an account.*
@@ -4762,6 +4977,40 @@ Kubernetes as a Service (KaaS?)*
 
 ![Untitled](img/Untitled%20136.png)
 
+
+### Standard vs Express Workflows
+
+| Atributo | Standard | Express |
+|---|---|---|
+| **Duracion maxima** | **1 ano** | **5 minutos** |
+| **Semantica** | **Exactly-once** | **At-least-once** (puede ejecutarse mas de una vez) |
+| **Historial** | Hasta 90 dias en consola | Solo en **CloudWatch Logs** |
+| **Precio** | Por **state transition** | Por **duracion + requests** |
+| **Throughput** | Miles/seg | **100,000/seg** |
+| **Casos de uso** | Long-running, aprobaciones humanas, workflows financieros | IoT, streaming, alto volumen, cargas idempotentes |
+
+**Trampa examen:** Express = at-least-once -> las tareas DEBEN ser **idempotentes**. Standard = exactly-once -> seguro para operaciones no idempotentes (pagos, etc.)
+
+### Los 8 tipos de estado
+
+| Estado | Funcion |
+|---|---|
+| **Task** | Invoca un trabajo (Lambda, ECS, API call, etc.) |
+| **Choice** | Ramificacion condicional (if/else) |
+| **Parallel** | Ejecuta multiples ramas **concurrentemente**, espera a todas |
+| **Map** | Itera pasos sobre cada elemento de un **array** (paralelismo dinamico) |
+| **Pass** | Pasa la entrada a la salida con transformaciones opcionales (sin trabajo real) |
+| **Wait** | Pausa la ejecucion por duracion o hasta timestamp |
+| **Succeed** | Termina la ejecucion con exito |
+| **Fail** | Termina la ejecucion con error |
+
+**Map vs Parallel:** Map = iterar sobre dataset; Parallel = ramas fijas simultaneas
+
+### Integraciones de servicio
+
+- **Request-Response:** Llama al servicio y avanza (no espera resultado)
+- **Synchronous (.sync):** Espera a que el trabajo/tarea complete
+- **Callback (.waitForTaskToken):** Pausa y espera que sistema externo llame de vuelta con token (aprobaciones humanas, APIs externas)
 ## API Gateway
 
 > *API Gateway is a managed service from AWS which allows the creation of API Endpoints, Resources & Methods.*
@@ -5224,6 +5473,100 @@ Calculate **RCU per item** - ROUND UP! ITEM.SIZE / 4KB = 1
 ## Redshift Resilience and Recovery
 
 ![Untitled](img/Untitled%20244.png)
+## Amazon DocumentDB
+
+> *Fully managed document database with MongoDB 3.6, 4.0, 5.0, and 8.0 API (wire-protocol) compatibility.*
+
+- Decoupled compute and storage; cluster volume spans **3 AZs** with **6 copies** of all data
+- Up to **15 read replicas**; replication lag typically **< 100ms**
+- Storage auto-scales in 10 GB increments up to **64 TB**
+- **Elastic clusters** - petabyte-scale horizontal sharding
+- **Global Clusters** - 1 primary + up to 10 secondary read-only regions; **< 1s** replication lag
+- ACID transactions (MongoDB 4.0+ API), Change Streams (v5.0+)
+- PITR up to **5 minutes** in the past; automated backups always enabled
+- **Not fully MongoDB-compatible** - wire-protocol compatible only
+
+## Amazon Neptune
+
+> *Fully managed graph database optimized for highly connected datasets.*
+
+| Model | Language |
+|---|---|
+| Property Graph | Apache TinkerPop **Gremlin** |
+| Property Graph | **openCypher** |
+| RDF | W3C **SPARQL** |
+
+- Up to **15 read replicas**; storage replicated **6x across 3 AZs** (self-healing)
+- ACID transactions; read replicas as failover targets (no data loss on failover)
+- **Neptune Analytics** - separate analytical engine for graph algorithms + vector search
+- **Global Database** - 1 primary + up to 5 secondary read-only clusters
+- Use cases: social networks, recommendations, fraud detection, knowledge graphs
+- Choose Neptune when question mentions **relationships/nodes/edges/social networks/fraud**
+
+## Amazon MemoryDB for Redis
+
+> *Fully managed, Redis-compatible durable in-memory database (primary DB, not just a cache).*
+
+- Microsecond reads, single-digit millisecond writes
+- Durability via **Multi-AZ transactional log** (writes persisted across AZs before acknowledged)
+- Up to 5 replicas per shard; automatic failover
+- Supports all Redis data types + native JSON
+- **MemoryDB vs ElastiCache**: MemoryDB = durable primary DB; ElastiCache = ephemeral cache
+
+## Amazon Timestream
+
+> *Fully managed, serverless time series database.*
+
+- Two storage tiers:
+  - **Memory Store** - recent/hot data; optimized for fast point-in-time queries
+  - **Magnetic Store** - historical/cold data; optimized for fast analytical queries
+- Data automatically moves Memory to Magnetic when retention threshold is reached
+- Use cases: IoT sensor data, DevOps/infrastructure metrics, financial time series
+- Integrates with: IoT Core, Kinesis, Grafana, QuickSight
+- **Timestream for InfluxDB** recommended for new workloads
+
+## Amazon EMR (Elastic MapReduce)
+
+> *Managed big data cluster platform for Spark, Hadoop, Hive, HBase, Presto, Flink, Trino, and more.*
+
+| Node | Role | Stores HDFS? |
+|---|---|---|
+| Primary (Master) | Coordinates cluster, resource manager | No |
+| Core | Runs tasks + stores HDFS data | Yes |
+| Task | Runs tasks only, no HDFS | No |
+
+- **HDFS** - distributed across core nodes; ephemeral (lost on termination); for intermediate data
+- **EMRFS** - access S3 as a file system; persistent; **always write final output to S3 via EMRFS**
+- Task nodes are **Spot-safe** (no HDFS risk); Core nodes should **NOT use Spot** (HDFS data loss)
+- **Bootstrap Actions** - scripts running after AMI launch but before app install; max **16 per cluster**
+- Transient clusters (auto-terminate) vs Persistent clusters (stay running)
+- EMR Serverless available: pay per vCPU-hour + GB-hour of memory
+
+## Amazon QuickSight
+
+> *Fully managed, serverless Business Intelligence (BI) service.*
+
+- **SPICE** (Super-fast, Parallel, In-memory Calculation Engine) - columnar storage engine; 10 GB included per user
+- Data sources: S3, RDS, Redshift, Athena, Aurora, DynamoDB, Salesforce, on-premises JDBC
+- **Enterprise edition** required for: encryption at rest, AD integration, ML Insights, email reports, VPC connectivity, column-level security
+- **ML Insights** (Enterprise): anomaly detection, forecasting, contribution analysis, natural language narratives
+- User types: Admin, Author (creates dashboards), Reader (views; pay-per-session in Enterprise)
+- Common pipeline: Kinesis/Glue > S3 > Athena/Redshift > **QuickSight** for BI
+
+## AWS Lake Formation
+
+> *Fully managed service for building, securing, and governing data lakes on S3.*
+
+- Centralizes access control using the **AWS Glue Data Catalog** as metadata repository
+- Permissions model: GRANT/REVOKE like RDBMS; works alongside IAM (more restrictive wins)
+- Fine-grained access at: database, table, **column**, **row**, **cell** level
+- **Tag-Based Access Control (TBAC/LF-Tags)** - assign labels to Catalog objects; grant by tag key/value
+- **Hybrid Access Mode** - gradual adoption without breaking existing IAM-based S3 access
+- Cross-account data sharing without copying data; AWS Organizations-level sharing
+- Enforces permissions across: Athena, Redshift Spectrum, EMR, Glue ETL, QuickSight
+- **Blueprint** = pre-built workflow template for ingesting common data sources
+- Key differentiator vs plain IAM: column/row/cell-level security that IAM alone cannot provide on S3
+
 
 
 
@@ -5665,6 +6008,122 @@ Calculate **RCU per item** - ROUND UP! ITEM.SIZE / 4KB = 1
 ### Architecture
 
 ![Untitled](img/Untitled%20202.png)
+## AWS Security Hub
+
+> *CSPM (Cloud Security Posture Management) - centralized security findings from multiple AWS services.*
+
+- Standardizes all findings using **AWS Security Finding Format (ASFF)** - JSON schema
+- Ingests from: GuardDuty, Inspector, Macie, IAM Access Analyzer, Firewall Manager, Audit Manager + third-party tools
+- Compliance standards: **AWS FSBP**, **CIS AWS Foundations**, **PCI DSS**, **NIST SP 800-53**, **NIST SP 800-171**
+- Requires **AWS Config** to be enabled for automated compliance checks
+- **Regional service** - must be enabled per region; supports cross-region aggregation
+- Integrates with AWS Organizations for org-wide coverage
+- Custom Actions > EventBridge for automated remediation workflows
+
+## Amazon Detective
+
+> *Uses ML, statistical analysis, and graph theory to build a behavior graph for security investigations.*
+
+- Data sources: VPC Flow Logs, CloudTrail management events, EKS Audit Logs, Security Lake
+- Used for **root cause investigation after a finding is raised** - does NOT generate findings itself
+- GuardDuty = threat detection; Security Hub = aggregation/compliance; **Detective = root cause investigation**
+- **GuardDuty is no longer a prerequisite** to use Detective
+- Charged based on **volume of data ingested (GB)**; 30-day free trial
+
+## AWS Firewall Manager
+
+> *Centralized management of security policies across multiple accounts in AWS Organizations.*
+
+- Supported policy types: **AWS WAF**, VPC Security Groups, NACLs, **Network Firewall**, **Shield Advanced**, DNS Firewall
+- Prerequisites: **AWS Organizations** + **AWS Config** (both mandatory)
+- Auto-enrolls new accounts and resources created after policy definition
+- Pricing: **00/policy/Region/month** (plus underlying service costs)
+- Use when exam scenario involves **multiple accounts** needing consistent security policies
+
+## AWS Artifact
+
+> *On-demand downloads of AWS security and compliance documents: ISO certifications, PCI, SOC reports.*
+
+## AWS Trusted Advisor
+
+> *Analyzes your AWS environment and provides real-time best practice recommendations.*
+
+**5 Check Categories:**
+- **Cost Optimization** - idle resources, unassociated Elastic IPs, RI purchase recommendations
+- **Performance** - high-utilization instances, CloudFront optimization
+- **Security** - MFA on root, IAM key rotation, S3 bucket permissions, exposed access keys, open security groups
+- **Fault Tolerance** - EBS snapshots, RDS Multi-AZ, Route 53 health checks, ASG coverage
+- **Service Limits** - alerts when utilization exceeds 80% of a service quota
+
+| Plan | Access |
+|---|---|
+| Basic / Developer | 6 core security checks + service limit checks only |
+| Business / Enterprise | All **482 checks** + AWS Support API + CLI access |
+
+- **Organizational View** - consolidated reports across all AWS Organizations accounts
+- Checks refresh automatically weekly; manual refresh limited to **once every 5 minutes**
+- Does **NOT automatically fix issues** - recommendations only
+- CloudWatch/EventBridge integration for automating responses to check status changes
+
+## AWS X-Ray
+
+> *Distributed tracing service - analyzes and debugs production applications, especially microservices.*
+
+**Core Concepts:**
+- **Trace** - complete path of a single request through all components
+- **Segment** - data about work done by one resource (EC2, Lambda, etc.)
+- **Subsegment** - granular operations within a segment (DynamoDB call, HTTP call)
+- **Annotations** - indexed key-value pairs; searchable with filter expressions (max 50/trace)
+- **Metadata** - non-indexed key-value pairs; not searchable; no size limit
+- **Service Map** - visual representation of components; shows latency/errors per node
+
+**X-Ray Daemon:**
+- Listens for UDP traffic on port **2000**
+- Buffers segments and uploads to X-Ray in batches via HTTPS
+- Required on EC2, ECS (as sidecar); **built-in on Lambda** (no daemon needed)
+
+**Sampling:** Default: **1 request/second + 5%** of additional requests
+
+- **Annotations** = searchable (indexed); **Metadata** = not searchable
+- Lambda has **native X-Ray integration** - just enable active tracing
+- Trace retention: **30 days**; supports Node.js, Java, .NET, Python, Go, Ruby
+- Integrates with Lambda, API Gateway, EC2, ECS/EKS, SQS, SNS, ELB
+
+## AWS OpsWorks
+
+> *Configuration management service providing managed Chef and Puppet instances.*
+
+- **OpsWorks Stacks reached End of Life May 26, 2024** - migrate to Systems Manager
+- Stacks > Layers > Instances > Apps hierarchy
+- Lifecycle events: **Setup** > **Configure** (runs on ALL instances when topology changes) > **Deploy** > **Undeploy** > **Shutdown**
+- Instance scaling: **24/7**, **Time-based** (scheduled), **Load-based** (metric-based)
+- OpsWorks is the answer when question mentions **Chef** or **Puppet** as the config management tool
+
+## AWS Service Catalog
+
+> *Create and manage catalogs of pre-approved IT services (CloudFormation templates) for self-service provisioning.*
+
+- **Portfolios** - collections of products shared via IAM or across AWS accounts/Organizations
+- **Launch Constraint** - IAM role used to launch products; allows least-privilege for end users (**most exam-relevant constraint**)
+- **Template Constraint** - restrict CloudFormation parameter values end users can select
+- **Stack Set Constraint** - deploy across multiple accounts/regions
+- **TagOptions** - enforce consistent resource tagging at launch
+- Use when exam says: allow developers to launch approved infrastructure without full AWS console access
+- Every Service Catalog product is ultimately a **CloudFormation stack**
+
+## AWS Systems Manager (SSM) - Extended Capabilities
+
+- **Session Manager** - browser-based shell to EC2/on-premises; **no SSH/RDP ports needed**; sessions logged to CloudWatch Logs or S3; supports port forwarding
+- **Patch Manager** - automated OS/application patching via patch baselines; integrates with Maintenance Windows
+- **Automation** - pre-built or custom runbooks (SSM Documents); cross-account/cross-region execution
+- **State Manager** - define and maintain consistent configuration state on managed instances
+- **Inventory** - collect metadata about installed software, network configs, OS details
+- **Parameter Store Tiers:**
+  - Standard: up to **10,000 parameters**; max **4 KB** value; no additional cost
+  - Advanced: up to **100,000 parameters**; max **8 KB** value; supports **parameter policies**; additional cost
+- **SSM Agent** pre-installed on Amazon Linux 2, Amazon Linux 2023, Windows Server AMIs
+- On-premises servers need SSM Agent + **activation ID/code** (not IAM role)
+
 
 
 
@@ -6499,6 +6958,61 @@ Reduce admin overhead*
 ### Endpoint Type
 
 ![Untitled](img/Untitled%20194.png)
+## AWS Outposts
+
+> *Fully managed service extending AWS infrastructure, services, and tools to on-premises or edge locations.*
+
+| Form Factor | Use Case |
+|---|---|
+| **Outposts Rack (42U)** | Full rack for data centers |
+| **Outposts Servers (1U/2U)** | Branch offices, retail, factory floors |
+
+Supported: EC2, EBS, RDS (MySQL/PostgreSQL), ECS, EKS, ElastiCache, EMR, S3 on Outposts
+
+- **AWS owns and manages all hardware** - you do NOT buy it; requires 1-year or 3-year commitment
+- **Service link** - mandatory encrypted VPN connection back to the parent AWS Region
+- **Local Gateway (LGW)** - enables communication between Outpost instances and on-premises networks
+- **Direct Connect** strongly recommended (not mandatory) for the service link
+- **S3 on Outposts** - separate from S3; data stays on-premises; uses DataSync for transfers to/from S3 Region
+- Key drivers: **data sovereignty/residency**, **ultra-low latency**, **on-prem application requirements**
+
+| Service | Location | Use Case |
+|---|---|---|
+| **Outposts** | Customer premises | On-prem AWS infra; data residency |
+| **Local Zones** | AWS-operated metro locations | Ultra-low latency to city users |
+| **Wavelength** | Telecom edge | Ultra-low latency for 5G |
+
+## AWS Wavelength
+
+> *Deliver ultra-low-latency applications for 5G devices - AWS compute/storage embedded within telecom provider edge networks.*
+
+- Latency as low as single-digit milliseconds to 5G devices
+- Extend VPC subnets directly into telecom provider networks (Verizon, Vodafone, etc.)
+- Same AWS APIs/tools as normal regions; no traffic through public Internet for 5G users
+- Compare: Outposts (on-premises data residency), Local Zones (metro cities), Wavelength (telecom 5G edge)
+
+## Amazon WorkSpaces
+
+> *Fully managed cloud desktop service (DaaS - Desktop as a Service).*
+
+| Service | Description |
+|---|---|
+| **WorkSpaces Personal** | Persistent dedicated virtual desktops |
+| **WorkSpaces Pools** | Non-persistent desktops for shift/task workers |
+| **WorkSpaces Thin Client** | Low-cost physical device for cloud desktops |
+| **WorkSpaces Secure Browser** | Isolated managed browser |
+
+**Streaming Protocols:**
+- **PCoIP** - Legacy; supports selected USB peripherals
+- **WSP (WorkSpaces Streaming Protocol)** - AWS-native; supports **webcam and audio redirection**; recommended
+
+- Directory integration: Simple AD, AWS Managed Microsoft AD, **AD Connector** (proxy to on-premises AD)
+- MFA requires a **RADIUS server** integration
+- **BYOL** - Bring Your Own License (Windows); runs on physically dedicated hardware
+- Pricing: **AlwaysOn** (monthly fixed) vs **AutoStop** (hourly; stops after inactivity)
+- Encrypted volumes must be configured **at launch time** (cannot be enabled after creation)
+- Data stays in AWS - suitable for BYOD security scenarios
+
 
 
 
@@ -6831,6 +7345,125 @@ Reduce admin overhead*
 - ❗Passes data to something, gets data back from something❗
 
 ![Untitled](img/Untitled%20226.png)
+# Deployment, Developer Tools & Compute Services
+
+## AWS Elastic Beanstalk
+
+> *PaaS - deploys and manages web applications without managing infrastructure. Supports Java, Python, Node.js, Ruby, PHP, Go, .NET, Docker.*
+
+**Environment Tiers:**
+- **Web Server** - handles HTTP/HTTPS; provisions EC2 + ELB + Auto Scaling
+- **Worker** - pulls tasks from an **SQS queue** for background processing
+
+**Deployment Policies:**
+| Policy | Description |
+|---|---|
+| **All at once** | Deploys to all instances simultaneously; brief downtime; fastest |
+| **Rolling** | Deploys in batches; reduced capacity during deployment |
+| **Rolling with additional batch** | Launches extra batch first; maintains full capacity |
+| **Immutable** | Brand-new ASG with new instances; safest; highest cost |
+| **Traffic splitting** | Canary testing - shifts configurable % to new fleet |
+| **Blue/Green** | Swap two separate environments via CNAME swap |
+
+- **** - YAML/JSON  files for customizing environment (packages, commands, env vars)
+- **No additional charge** - pay only for underlying EC2, ELB, RDS resources
+- **CNAME swap** achieves zero-downtime Blue/Green deployments
+- Max **75 application versions** per region (soft), **200 applications**, **200 environments** per account
+- **Immutable** = safest; **All at once** = fastest but causes downtime
+- Worker tier + SQS is the pattern for **decoupled background jobs**
+
+## AWS Batch
+
+> *Fully managed service to run batch computing jobs at any scale - dynamically provisions optimal compute resources.*
+
+**Core Components:**
+- **Job Definition** - template (Docker image, vCPU/memory requirements, IAM role, retry/timeout)
+- **Job Queue** - jobs submitted here; mapped to one or more compute environments; higher priority = first
+- **Compute Environment** - **Managed** (AWS handles scaling; EC2 On-Demand/Spot or Fargate) or **Unmanaged** (you manage EC2)
+- **Job** - individual unit of work (container); supports retry strategies and timeouts
+
+**Job Types:**
+- **Array Jobs** - single submission spawning multiple child jobs (Monte Carlo simulations, parameter sweeps)
+- **Multi-Node Parallel Jobs** - HPC spanning multiple EC2 instances; **NOT supported on Spot Instances**
+
+- No charge for AWS Batch itself - pay for underlying EC2/Fargate/EKS resources
+- Spot Instances: up to **90% cost reduction** for fault-tolerant jobs
+- Multi-node parallel jobs require **EC2 On-Demand** (cannot use Spot)
+- AWS Batch for **batch workloads** in containers; Lambda for **event-driven short tasks**
+
+## AWS Compute Optimizer
+
+> *ML-powered service recommending optimal AWS resource configurations to reduce costs and improve performance.*
+
+**Supported Resources:** EC2 Instances, EC2 Auto Scaling Groups, EBS Volumes, Lambda Functions, RDS DB Instances
+
+- **Under-provisioned** = bottlenecked; **Over-provisioned** = larger than needed; **Optimized** = correctly sized; **None** = insufficient data
+- Default lookback: **14 days** of CloudWatch metrics
+- **Enhanced Infrastructure Metrics** (paid): extends lookback to **3 months (93 days)**
+- **Does NOT make changes automatically** - recommendations only
+- **Opt-in required** - not enabled by default; available org-wide via AWS Organizations
+- Compute Optimizer = right-sizing with ML; Trusted Advisor = broader best practices
+
+## AWS CodeBuild
+
+> *Fully managed continuous integration service - compiles code, runs tests, produces artifacts. No servers to manage.*
+
+- **Buildspec** () - YAML file defining build phases: , , , 
+- Build output artifacts stored in **S3** (same region as project)
+- Caching: S3 or local (source, Docker layer, custom); Docker layer cache requires privileged mode
+- Max **5 report groups** per project; logs to **CloudWatch Logs**
+- Integrates with CodePipeline as a build action provider
+
+## AWS CodeCommit
+
+> *Fully managed, private Git-based source control service.*
+
+- Native Git protocol; encrypted at rest and in transit; IAM-based access control
+- Authentication: HTTPS Git credentials, SSH, or **git-remote-codecommit (GRC)** (recommended for IAM roles/MFA)
+- Up to **5,000 repositories** per account; max file size via console: **6 MB**; Git blob: **2 GB**
+- **No longer available to new customers** (July 2024) - use GitHub/GitLab/Bitbucket for new workloads
+
+## AWS CodeDeploy
+
+> *Fully managed deployment service - automates deployments to EC2, on-premises, Lambda, ECS.*
+
+| Platform | Deployment Types | Agent Required |
+|---|---|---|
+| EC2 / On-Premises | In-place, Blue/Green | Yes |
+| AWS Lambda | Blue/Green only | No |
+| Amazon ECS | Blue/Green only | No |
+
+- **In-Place** (EC2/On-Premises only): stop, install, start; can deregister/re-register with ELB
+- **Blue/Green**: provisions replacement environment; supports **canary, linear, all-at-once** traffic shifting
+- **Agent required** for EC2/on-premises; **NOT required** for Lambda/ECS
+- AppSpec lifecycle hooks (EC2):  >  >  >  >  >  > 
+- Automatic rollback on deployment failure or CloudWatch alarm breach
+
+## AWS CodePipeline
+
+> *Fully managed continuous delivery service - orchestrates build, test, and deploy phases.*
+
+- **Does NOT build or deploy code itself** - it orchestrates other services (CodeBuild, CodeDeploy, etc.)
+- Minimum **2 stages** per pipeline; minimum **1 action** per stage
+- Each stage processes **one execution at a time** (stage locking)
+- **Artifact store** = S3 bucket in same region as pipeline; artifacts passed between stages
+
+**Action Types:** , , , , , 
+
+| Mode | Behavior |
+|---|---|
+| **SUPERSEDED** (default) | Newer executions replace older waiting ones |
+| **PARALLEL** | Multiple executions run simultaneously |
+| **QUEUED** | Executions wait in order |
+
+- Max **1,000 pipelines** per region; max **300 polling pipelines** - prefer event-based triggers
+- Max **50 stages** per pipeline; **1,000 actions** total; execution history retained **12 months**
+- Manual approval actions timeout: up to **7 days**
+
+## AWS Proton
+
+> *Deployment workflow tool for modern applications that helps platform and DevOps engineers achieve organizational agility.*
+
 
 
 
@@ -6886,88 +7519,3 @@ Reduce admin overhead*
 - Ideally - what remains is correct
     - worst case, quickly select between what remains
 - **DON’T PANIC - mark for review and come back later**
-
-## Services not covered in course
-
-### Elastic Beanstalk
-
-> *AWS Elastic Beanstalk is an easy-to-use service for deploying and scaling web applications and services developed with Java, .NET, PHP, Node.js, Python, Ruby, Go, and Docker on familiar servers such as Apache, Nginx, Passenger, and IIS*
-> 
-
-### AWS X-Ray
-
-> *AWS X-Ray provides a complete view of requests as they travel through your application and filters visual data across payloads, functions, traces, services, APIs, and more with no-code and low-code motions.*
-> 
-
-### AWS Trusted Advisor
-
-- Best practices
-- Costs
-
-### Amazon Neptune
-
-- Graph database
-
-### Amazon DocumentDB
-
-- MongoDB
-
-### Amazon Workspaces
-
-### Amazon EMR (Elastic MapReduce)
-
-> ***Easily run and scale Apache Spark, Hive, Presto, and other big data workloads***
-> 
-
-### Elastic Network Adapter
-
-- ENA is **a custom network interface optimized to deliver high throughput and packet per second (PPS) performance, and consistently low latencies on EC2 instances**.
-
-### **Elastic Fabric Adapter**
-
-- Run HPC and ML applications at scale
-- Is simply ENA with added capabilities
-- OS-bypass capabilities not supported on Windows instances
-
-### AWS Network Firewall
-
-> *AWS Network Firewall is a stateful, managed, network firewall, and intrusion detection and prevention service for your virtual private cloud (VPC). With Network Firewall, you can filter traffic at the perimeter of your VPC. This includes traffic going to and coming from an internet gateway, NAT gateway, or over VPN or AWS Direct Connect. Network Firewall uses Suricata — an open-source intrusion prevention system (IPS) for stateful inspection.*
-> 
-- VPC-level
-- Non HTTP/S traffic - WAF Handles this
-- Level 4
-
-### AWS Wavelength
-
-> ***Deliver ultra-low-latency applications for 5G devices***
-> 
-
-### AppSync
-
-> *AWS AppSync is a serverless **GraphQL** and Pub/Sub API service that simplifies building modern web and mobile applications.*
-> 
-
-### AWS CodePipeline
-
-> ***Automate continuous delivery pipelines for fast and reliable updates***
-> 
-
-### Run Command
-
-> *Run Command **allows you to automate common administrative tasks and perform one-time configuration changes at scale**.*
-> 
-
-### AWS Proton
-
-> AWS Proton is a deployment workflow tool for modern applications that helps platform and DevOps engineers achieve organizational agility.
-> 
-
-### Amazon Simple Workflow Service (SWF)
-
-> The Amazon Simple Workflow Service (Amazon SWF) makes it easy to build applications that coordinate work across distributed components
-> 
-
-### AWS Artifact
-
-> *AWS Artifact provides on-demand downloads of AWS security and compliance documents, such as AWS ISO certifications, Payment Card Industry (PCI), and Service Organization Control (SOC) reports.*
-> 
