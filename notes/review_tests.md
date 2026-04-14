@@ -3162,6 +3162,1445 @@ S3 bucket/nombreusuario/* (solo su carpeta) ✅
 
 &nbsp;
 
+## AWS DMS con CDC + SSL: Migración y Replicación Continua
+
+### Los requisitos del escenario
+
+```
+1. Copiar MySQL on-premises → S3 como CSV (carga inicial)
+2. Capturar cambios continuos después de la migración (ongoing)
+3. Alta seguridad (conexiones cifradas)
+4. Poco overhead de gestión
+```
+
+---
+
+### La solución correcta: DMS Full Load + CDC + SSL
+
+```
+MySQL on-premises
+         ↓ Full Load (carga inicial completa)
+         ↓ + CDC (Change Data Capture - cambios continuos)
+AWS DMS con endpoint SSL
+├── Certificado CA propio añadido a DMS console
+├── Conexión cifrada TLS ✅
+└── Salida en formato .csv por defecto ✅
+         ↓
+Amazon S3 bucket (CSV files)
+         ↓ (futuro)
+Aurora Serverless + RDS Proxy
+```
+
+---
+
+### Full Load vs CDC: roles distintos pero complementarios
+
+```
+Full Load                        CDC (Change Data Capture)
+──────────                       ─────────────────────────
+Copia TODOS los datos            Captura SOLO los cambios
+existentes al inicio             después de la carga inicial
+Migración inicial ✅             Sincronización continua ✅
+Una sola vez                     Streaming permanente
+```
+
+> La pregunta requiere **ambos** en la misma tarea DMS.
+
+---
+
+### Por qué las otras opciones fallan
+
+| Opción | Error específico |
+|---|---|
+| **DMS Full Load únicamente + Network Firewall para SSL** | Sin CDC → no captura cambios continuos. Network Firewall no crea certificados DMS, eso se hace directo en la consola DMS |
+| **SCT + AWS MGN** | SCT convierte esquemas, no replica datos. MGN es para lift-and-shift de aplicaciones completas, no para replicación de DB |
+| **Snowball Edge + DataSync** | Snowball es para migraciones masivas físicas. DataSync para replicación requiere pasos extra innecesarios cuando DMS lo hace directamente |
+
+---
+
+### Regla mental para el examen
+
+> - **Migrar DB + capturar cambios continuos** → **DMS Full Load + CDC**
+> - **Cifrar conexiones DMS** → **SSL con CA certificate** (no Network Firewall)
+> - **Convertir esquema entre motores** → **AWS SCT** (heterogéneo)
+> - **Migrar servidores completos (lift-and-shift)** → **AWS MGN**
+> - **DMS → S3** genera archivos **.csv por defecto** (también soporta Parquet)
+   
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
+## SQS FIFO vs Standard: Eliminando Mensajes Duplicados
+
+### El problema raíz
+
+```
+SQS Standard Queue
+├── Entrega "at-least-once" → puede entregar el mismo mensaje MÁS DE UNA VEZ
+├── Sin garantía de orden
+└── Si EC2 falla antes de eliminar el mensaje → mensaje reaparece → procesado dos veces ❌
+```
+
+---
+
+### La solución: SQS FIFO Queue
+
+```
+SQS FIFO Queue
+├── Entrega "exactly-once" → cada mensaje procesado UNA SOLA VEZ ✅
+├── Orden garantizado (First-In-First-Out) ✅
+├── Deduplicación automática de mensajes
+└── Ideal para: pedidos, transacciones financieras, comandos secuenciales
+```
+
+---
+
+### Por qué las otras opciones no resuelven el problema
+
+| Opción | Qué hace realmente | ¿Resuelve duplicados? |
+|---|---|---|
+| **Visibility timeout** | Oculta el mensaje mientras se procesa | ❌ No garantiza contra duplicados en Standard queue |
+| **Retention period** | Define cuánto tiempo existe el mensaje en la cola | ❌ No tiene relación con duplicados |
+| **Message size** | Límite de tamaño del mensaje (256 KB) | ❌ Completamente irrelevante |
+| **FIFO Queue** | Exactly-once + orden garantizado | ✅ Elimina duplicados |
+
+---
+
+### Standard vs FIFO: comparación directa
+
+```
+SQS Standard                     SQS FIFO
+────────────                      ─────────
+At-least-once delivery ❌         Exactly-once delivery ✅
+Sin orden garantizado             Orden garantizado (FIFO)
+Throughput ilimitado              300 msg/s (3,000 con batching)
+Más barato                        Ligeramente más costoso
+Para alta escala sin importar     Para orden y no-duplicación
+duplicados                        críticos
+```
+
+---
+
+### Regla mental para el examen
+
+> - **Mensajes duplicados en SQS** → **FIFO Queue** (exactly-once delivery)
+> - **Orden de procesamiento crítico** → **FIFO Queue**
+> - **Máximo throughput sin importar duplicados** → **Standard Queue**
+> - **Visibility timeout** → evita que otros consumidores vean el mensaje, pero NO elimina duplicados
+   
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
+## Amazon Neptune + Neptune Streams: Base de Datos de Grafos para Recomendaciones
+
+### Los requisitos del escenario
+
+```
+1. Almacenar datos con relaciones complejas (interacciones, preferencias, patrones)
+2. Motor de recomendaciones basado en comportamiento de usuarios
+3. Rastrear cambios en la base de datos dinámicamente
+4. Mínimo overhead operacional
+```
+
+---
+
+### ¿Por qué Neptune es la elección correcta?
+
+```
+Datos de relaciones complejas:
+Usuario → compró → Producto A
+Usuario → vio → Producto B
+Usuario → es amigo de → Usuario 2
+Usuario 2 → compró → Producto C
+         ↓
+Neptune (Graph Database) → consultas en milisegundos sobre billones de relaciones ✅
+```
+
+**Neptune Streams** para cambios en tiempo real:
+```
+Cambio en el grafo (nueva compra, nueva relación)
+         ↓
+Neptune Streams captura y registra CADA cambio
+en orden cronológico ✅
+         ↓
+Accesible via HTTP REST API
+         ↓
+Motor de recomendaciones actualizado en tiempo real ✅
+```
+
+---
+
+### Por qué las otras opciones fallan
+
+| Opción | Problema específico |
+|---|---|
+| **Aurora PostgreSQL + Kinesis** | Aurora es relacional, no optimizado para datos de grafos. Kinesis añade complejidad operacional innecesaria |
+| **Neptune + Kinesis Data Streams** | Kinesis no entiende las relaciones de grafo nativamente. Neptune Streams está diseñado específicamente para datos de grafo |
+| **Amazon Keyspaces + Neptune Streams** | Keyspaces es compatible con Cassandra (NoSQL columnar), no es una base de datos de grafos. Neptune Streams solo funciona con Neptune |
+
+---
+
+### Mapa de bases de datos especializadas en AWS
+
+```
+Relacional (SQL)          → RDS, Aurora
+NoSQL clave-valor         → DynamoDB
+NoSQL columnar            → Amazon Keyspaces (Cassandra)
+Grafos (relaciones)       → Amazon Neptune ✅
+Time-series               → Amazon Timestream
+Documentos                → Amazon DocumentDB
+En memoria (caché)        → ElastiCache
+Data warehouse (OLAP)     → Amazon Redshift
+```
+
+---
+
+### Regla mental para el examen
+
+> - **Relaciones complejas + redes sociales + motores de recomendación + detección de fraude** → **Amazon Neptune**
+> - **Cambios en tiempo real en Neptune** → **Neptune Streams** (no Kinesis)
+> - **Kinesis** → streaming de datos externos, no cambios internos de grafo
+> - Cuando el problema menciona "relaciones entre entidades" o "grafos" → siempre **Neptune**
+   
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
+## EC2 Billing: Cuándo se Cobra y Cuándo No
+
+### Mapa de estados EC2 y su facturación
+
+```
+pending      → ❌ NO se cobra (preparando para ejecutar)
+running      → ✅ SÍ se cobra (estado normal de operación)
+stopping     → ⚠️ DEPENDE:
+               ├── Preparando para STOP    → ❌ NO se cobra
+               └── Preparando para HIBERNATE → ✅ SÍ se cobra
+stopped      → ❌ NO se cobra (apagado)
+shutting-down → ❌ NO se cobra (preparando para terminar)
+terminated   → ⚠️ DEPENDE del tipo:
+               ├── On-Demand terminada     → ❌ NO se cobra
+               └── Reserved Instance terminada → ✅ SÍ se cobra
+                   (hasta el fin del término contratado)
+```
+
+---
+
+### Las dos respuestas correctas explicadas
+
+**✅ On-Demand en `stopping` preparando para hibernar → SE COBRA**
+> Durante hibernación, el contenido de RAM se guarda en el volumen EBS. La instancia mantiene su estado y sigue incurriendo en cargos durante este proceso.
+
+**✅ Reserved Instance en estado `terminated` → SE COBRA**
+> Las Reserved Instances se pagan por contrato (1 o 3 años). Aunque la instancia se termine, el compromiso de pago continúa hasta el fin del término.
+
+---
+
+### Por qué las otras opciones son incorrectas
+
+| Opción | Por qué es falsa |
+|---|---|
+| **Spot instance en `stopping`** | No se cobra cuando se prepara para detenerse |
+| **On-Demand en `pending`** | Pending es solo preparación inicial, sin cargo |
+| **"No se cobra si no está en `running`"** | Falso: hibernación (`stopping`) y Reserved terminadas sí se cobran |
+
+---
+
+### Regla mental para el examen
+
+> - **`stopping` → stop** = no se cobra
+> - **`stopping` → hibernate** = sí se cobra
+> - **Reserved Instance terminada** = sigue cobrándose hasta fin del contrato
+> - **`pending`, `stopped`, `shutting-down`** = no se cobra en On-Demand/Spot
+   
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
+## S3 + DynamoDB: Solución Costo-Efectiva para Base de Datos GIS
+
+### Los requisitos del escenario
+
+```
+1. Almacenar imágenes de alta resolución con códigos geográficos
+2. Actualizaciones frecuentes (minuto a minuto)
+3. Alta disponibilidad y escalabilidad
+4. Migrar desde Oracle
+5. Costo-efectivo
+```
+
+---
+
+### La solución correcta: S3 + DynamoDB
+
+```
+Imagen de alta resolución → Amazon S3 (object storage) ✅
+                                    ↓ URL del objeto
+DynamoDB Table:
+┌─────────────────┬──────────────────────────────┐
+│ geographic_code │ image_s3_url                 │
+│ (Primary Key)   │ (valor asociado)             │
+├─────────────────┼──────────────────────────────┤
+│ GEO-LAT123      │ s3://bucket/imagen-123.tif   │
+│ GEO-LAT456      │ s3://bucket/imagen-456.tif   │
+└─────────────────┴──────────────────────────────┘
+```
+
+**¿Por qué esta combinación?**
+- S3 → almacenamiento ilimitado y económico para imágenes grandes
+- DynamoDB → clave-valor de baja latencia, altamente escalable, sin servidor que gestionar
+
+---
+
+### Por qué las otras opciones fallan
+
+| Opción | Error específico |
+|---|---|
+| **RDS Oracle Multi-AZ** | Almacenar imágenes como BLOBs en Oracle es costoso (licencias Oracle + instancias grandes). S3 es mucho más económico para objetos estáticos |
+| **S3 + Amazon Keyspaces (Cassandra)** | Keyspaces es para datos de alta velocidad con esquemas flexibles. DynamoDB es más adecuado para este simple caso de clave-valor |
+| **DynamoDB + DAX para imágenes** | ❌ Dos problemas: (1) Las imágenes de alta resolución exceden el límite de 400 KB por ítem en DynamoDB. (2) DAX optimiza **lecturas**, pero el sistema es **write-intensive** → innecesario y costoso |
+
+---
+
+### Límites importantes de DynamoDB a recordar
+
+```
+Tamaño máximo por ítem: 400 KB
+→ Nunca almacenes imágenes/archivos grandes directamente en DynamoDB
+→ Solución correcta: S3 para el objeto + DynamoDB para la referencia (URL)
+```
+
+---
+
+### Regla mental para el examen
+
+> - **Imágenes/archivos grandes** → siempre en **S3**, nunca directamente en DynamoDB
+> - **Referencia/metadata de objetos S3** → **DynamoDB** (clave-valor rápido)
+> - **DAX** → solo justificado para sistemas **read-heavy**, no write-intensive
+> - **Keyspaces** → esquemas flexibles y alta velocidad, no simple clave-valor
+> - **Oracle en RDS** → costoso por licencias; migrar a servicios nativos AWS ahorra dinero
+   
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
+Esta es una pregunta conceptual directa. Aquí el resumen:
+
+### Respuesta: AWS Storage Gateway
+
+Es el servicio diseñado específicamente para **extender infraestructura on-premises hacia la nube AWS**, actuando como puente entre ambos entornos.
+
+---
+
+### Por qué las otras opciones no aplican
+
+| Servicio | Propósito real |
+|---|---|
+| **Amazon EC2** | Servicio de **cómputo** (servidores virtuales), no storage |
+| **Amazon EBS** | Block storage **exclusivo para instancias EC2**, no extiende on-premises |
+| **Amazon SQS** | Servicio de **colas de mensajes**, sin relación con storage |
+| **AWS Storage Gateway** | ✅ Conecta on-premises con cloud storage de forma transparente |
+
+---
+
+### Regla mental para el examen
+
+> - **Extender storage on-premises hacia AWS** → **AWS Storage Gateway**
+> - Los tres tipos de Gateway (File, Tape, Volume) cubren diferentes casos de uso, pero todos resuelven la integración híbrida on-premises ↔ AWS
+   
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
+## Route 53 Geoproximity Routing: Control de Cobertura Geográfica
+
+### La distinción clave del escenario
+
+El requisito no es simplemente "enrutar por ubicación" sino **controlar qué tan grande es el área geográfica** que se enruta a cada región. Eso requiere **bias**.
+
+---
+
+### Geoproximity Routing + Bias
+
+```
+Sin bias (default):
+├── Filipinas → Sydney (más cercano geográficamente)
+└── India Norte → Sydney o Tokyo (similar distancia)
+
+Con bias positivo en Tokyo:
+├── Bias +X en ap-northeast-1 (Tokyo) → expande su área de cobertura
+└── Filipinas Norte + India Norte → ahora enrutados a Tokyo ✅
+```
+
+```
+Bias positivo  → EXPANDE la región geográfica del recurso (atrae más tráfico)
+Bias negativo  → REDUCE la región geográfica del recurso (atrae menos tráfico)
+```
+
+---
+
+### Comparación de políticas de routing relevantes
+
+| Política | Basada en | Control de cobertura | Caso de uso |
+|---|---|---|---|
+| **Geoproximity** | Ubicación usuario + recurso | ✅ Sí (con bias) | Ajustar áreas de cobertura ✅ |
+| **Geolocation** | Ubicación del usuario | ❌ No (fija por país/continente) | Enrutar por país específico |
+| **Latency** | Menor latencia a la región | ❌ No | Mejor performance |
+| **Weighted** | Porcentaje de tráfico | ❌ No (no geográfico) | A/B testing, load balancing |
+
+---
+
+### Por qué Geolocation no funciona aquí
+
+```
+Geolocation Routing:
+├── Filipinas → asignado a una región fija
+└── India → asignado a una región fija
+❌ No puedes expandir/contraer la cobertura
+❌ No puedes enrutar "parte norte de Filipinas" a Tokyo
+   y "parte sur" a Sydney
+```
+
+---
+
+### Regla mental para el examen
+
+> - **Controlar el tamaño del área geográfica** que va a cada recurso → **Geoproximity + bias**
+> - **Enrutar por país/continente específico** (sin ajuste de cobertura) → **Geolocation**
+> - **Menor latencia** → **Latency Routing**
+> - **Dividir tráfico en porcentajes** → **Weighted Routing**
+> - **Bias positivo** = más cobertura; **Bias negativo** = menos cobertura
+   
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
+## AWS DataSync + S3 Glacier Deep Archive: Migración de Datos Históricos
+
+### El problema del escenario
+
+```
+On-premises storage casi lleno
+├── Datos activos → deben quedarse on-premises
+└── Datos históricos (cold data) → mover a AWS
+                                   para liberar espacio
+```
+
+---
+
+### La solución correcta: DataSync → S3 Glacier Deep Archive directo
+
+```
+On-premises (datos históricos)
+         ↓
+AWS DataSync
+├── Velocidad hasta 10x mayor que herramientas open-source
+├── Maneja scripting, scheduling, monitoreo automáticamente
+├── Sin modificar aplicaciones existentes
+└── Transferencia directa a Glacier Deep Archive ✅
+         ↓
+S3 Glacier Deep Archive (costo mínimo para archivado)
+```
+
+---
+
+### Por qué las otras opciones son incorrectas
+
+| Opción | Problema específico |
+|---|---|
+| **Storage Gateway → Glacier Deep Archive** | Storage Gateway está diseñado para **acceso híbrido continuo con caché**, no para migración masiva de datos históricos |
+| **Storage Gateway → Glacier → lifecycle a Deep Archive** | Mismo problema + pasos innecesarios adicionales |
+| **DataSync → S3 Standard → lifecycle → Glacier Deep Archive (30 días)** | DataSync puede ir **directamente** a Glacier Deep Archive. No necesitas S3 Standard + esperar 30 días |
+
+---
+
+### DataSync vs Storage Gateway: distinción clave
+
+```
+AWS DataSync                     AWS Storage Gateway
+────────────                     ───────────────────
+Migración/transferencia          Integración híbrida continua
+masiva de datos                  on-premises ↔ AWS
+One-time o periódica             Acceso permanente con caché local
+Hasta 10x más rápido             Optimiza cambios incrementales
+Para mover datos fríos/históricos Para acceder datos activos en nube
+```
+
+---
+
+### Regla mental para el examen
+
+> - **Mover datos históricos/fríos de on-premises a AWS** → **AWS DataSync**
+> - **Acceso híbrido continuo con caché local** → **AWS Storage Gateway**
+> - **Archivado de largo plazo más económico en S3** → **S3 Glacier Deep Archive**
+> - DataSync puede escribir **directamente** en Glacier Deep Archive sin pasar por S3 Standard
+   
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
+## Route 53 Failover: Active-Active vs Active-Passive
+
+### La distinción fundamental
+
+```
+Active-Active Failover           Active-Passive Failover
+─────────────────────            ───────────────────────
+TODOS los recursos activos       Recursos PRIMARIOS activos
+simultáneamente                  Recursos SECUNDARIOS en standby
+                                 
+Route 53 responde con            Route 53 responde solo con
+cualquier recurso saludable      recursos primarios saludables
+                                 Si todos fallan → usa secundarios
+Política: Weighted, Latency,     Política: Failover (routing policy)
+Geolocation, etc.
+```
+
+---
+
+### ¿Por qué Active-Active con Weighted policy es correcto?
+
+El escenario requiere que **todos los recursos estén disponibles todo el tiempo**:
+
+```
+Región us-east-1 (activa)  ──┐
+Región eu-west-1 (activa)  ──┼──→ Route 53 (Weighted) → distribuye tráfico
+Región ap-northeast-1(activa)┘     entre todos los saludables
+
+Si una región falla → Route 53 detecta el health check fallido
+                   → excluye esa región automáticamente
+                   → tráfico continúa a las regiones saludables ✅
+```
+
+---
+
+### Por qué las otras opciones son incorrectas
+
+| Opción | Por qué falla |
+|---|---|
+| **Active-Passive con Weighted Records** | Active-Passive tiene primarios y secundarios. El requisito es que TODOS estén activos siempre |
+| **Active-Passive con múltiples primarios y secundarios** | Mismo problema: hay recursos en standby, no todos activos simultáneamente |
+| **Active-Active con un primario y un secundario** | Concepto inválido: Active-Active no tiene primarios ni secundarios. Todos son iguales |
+
+---
+
+### Regla mental para el examen
+
+> - **"Todos los recursos disponibles todo el tiempo"** → **Active-Active Failover**
+> - **"Recurso primario con backup en standby"** → **Active-Passive Failover**
+> - Active-Active usa: Weighted, Latency, Geolocation (cualquier política excepto Failover)
+> - Active-Passive usa: **Failover routing policy** específicamente
+> - En Active-Active **no existen** conceptos de "primario" y "secundario"
+   
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
+## Elastic IP + Network Load Balancer: IPs Estáticas para Whitelist
+
+### El problema del escenario
+
+```
+Clientes on-premises tienen firewalls con whitelist de IPs
+         ↓
+Necesitan una IP fija y confiable para agregar a su whitelist
+         ↓
+Los load balancers normalmente tienen IPs dinámicas que cambian
+```
+
+---
+
+### La solución: EIP + Network Load Balancer
+
+```
+Clientes on-premises
+(whitelist: IP fija conocida)
+         ↓
+Elastic IP (estática, nunca cambia) ✅
+         ↓
+Network Load Balancer (NLB) ← único LB que acepta EIP
+         ↓
+EC2 instances (backend)
+```
+
+---
+
+### ¿Por qué NLB y no ALB?
+
+| Load Balancer | Capa OSI | ¿Acepta Elastic IP? | Protocolo |
+|---|---|---|---|
+| **Application LB (ALB)** | Capa 7 (HTTP/HTTPS) | ❌ No | HTTP, HTTPS, gRPC |
+| **Network LB (NLB)** | Capa 4 (TCP/UDP) | ✅ Sí | TCP, UDP, TLS |
+| **Gateway LB** | Capa 3 | ❌ No | IP |
+
+> Si necesitas EIP en un ALB → pon un NLB **delante** del ALB.
+
+---
+
+### Por qué las otras opciones fallan
+
+| Opción | Error |
+|---|---|
+| **EIP en ALB** | ALB **no acepta** Elastic IP. Las IPs del ALB son dinámicas |
+| **CloudFront con IPs privadas** | CloudFront no resuelve el problema de IPs fijas en whitelist. Además no apunta a IPs privadas directamente |
+| **Route 53 Alias Record** | El DNS sigue resolviendo a IPs dinámicas del LB. Los clientes aún no pueden whitelistear una IP fija |
+
+---
+
+### Regla mental para el examen
+
+> - **IP estática/fija para whitelist en un load balancer** → **EIP + Network Load Balancer**
+> - **ALB nunca acepta EIP** → usa NLB delante si necesitas IP estática con ALB
+> - **NLB** = capa 4, millones de requests/segundo, IP estática posible
+> - **ALB** = capa 7, routing basado en contenido HTTP, sin EIP
+   
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
+## ElastiCache Memcached + Auto Discovery: Gestión Distribuida de Sesiones
+
+### Los requisitos específicos del escenario
+
+```
+1. Sesiones compartidas entre múltiples instancias ← distribuido
+2. Rendimiento multithreaded                       ← clave
+3. Detección automática de fallos de nodos         ← Auto Discovery
+4. Reemplazo automático de nodos fallidos          ← Auto Discovery
+5. Latencia sub-millisegundo                       ← caché en memoria
+```
+
+---
+
+### ¿Por qué Memcached con Auto Discovery?
+
+**Auto Discovery** resuelve los requisitos 3 y 4:
+```
+Sin Auto Discovery:
+├── App conecta manualmente a cada nodo
+├── Si un nodo falla → conexión rota
+└── Requiere intervención manual
+
+Con Auto Discovery:
+├── App conecta a UN nodo → obtiene lista de TODOS
+├── Nodos fallidos detectados automáticamente ✅
+├── Nodos fallidos reemplazados automáticamente ✅
+└── Sin hardcodear endpoints individuales
+```
+
+---
+
+### Memcached vs Redis para este caso
+
+| Característica | Memcached | Redis |
+|---|---|---|
+| **Multithreaded** | ✅ Sí (nativo) | ❌ Single-threaded por defecto |
+| **Auto Discovery** | ✅ Sí | ❌ No |
+| **Reemplazo automático de nodos** | ✅ Sí | ❌ No automático |
+| **Latencia sub-ms** | ✅ Sí | ✅ Sí |
+| **Persistencia de datos** | ❌ No | ✅ Sí |
+| **Estructuras de datos complejas** | ❌ No | ✅ Sí |
+
+> Para este escenario: **multithreaded + auto-replace nodos** → Memcached gana.
+
+---
+
+### Por qué las otras opciones fallan
+
+| Opción | Por qué falla |
+|---|---|
+| **Redis Global Datastore** | Redis no es multithreaded. No detecta/reemplaza nodos automáticamente. Global Datastore es para replicación cross-region, no para este caso |
+| **RDS + RDS Proxy** | Base de datos relacional → latencia en milisegundos, no sub-ms. Costoso para almacenamiento de sesiones |
+| **ELB Sticky Sessions** | Enruta usuarios al mismo servidor (no comparte sesiones). Si ese servidor falla → sesión perdida. No es distribuido |
+
+---
+
+### Regla mental para el examen
+
+> - **Sesiones distribuidas + multithreaded + auto-replace nodos** → **ElastiCache Memcached + Auto Discovery**
+> - **Persistencia + estructuras complejas + pub/sub** → **ElastiCache Redis**
+> - **Sticky sessions** → NO comparte estado, solo fija el usuario a un servidor
+> - **RDS para sesiones** → funcional pero costoso y lento comparado con caché en memoria
+   
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
+## CloudFront Origin Groups: Alta Disponibilidad con Failover
+
+### ¿Qué es un Origin Group en CloudFront?
+
+```
+Origin Group
+├── Origen Primario  → recibe tráfico normal
+└── Origen Secundario → CloudFront cambia automáticamente
+                        si el primario falla o devuelve
+                        códigos HTTP de error específicos
+
+Requisito: mínimo DOS orígenes para configurar origin failover
+```
+
+---
+
+### La solución correcta
+
+```
+AZ-A                    AZ-B
+┌──────────┐           ┌──────────┐
+│ EC2 #1   │           │ EC2 #2   │
+│(primario)│           │(secundario)│
+└──────────┘           └──────────┘
+      └───────────────────┘
+              ↑
+        Origin Group
+              ↑
+         CloudFront
+         (distribución global)
+```
+
+Si EC2 #1 (AZ-A) falla → CloudFront automáticamente usa EC2 #2 (AZ-B) ✅
+
+---
+
+### Por qué las otras opciones fallan
+
+| Opción | Error específico |
+|---|---|
+| **S3 para contenido dinámico** | S3 solo sirve **contenido estático**. El contenido dinámico requiere EC2 u otro servidor de aplicaciones |
+| **Auto Scaling Group como origen** | No puedes usar un ASG directamente como origen en CloudFront. Además necesitas **al menos 2 orígenes** para origin failover |
+| **Lambda@Edge en origin group** | Lambda@Edge no puede configurarse como parte de un origin group en CloudFront |
+
+---
+
+### Regla mental para el examen
+
+> - **Alta disponibilidad en CloudFront** → **Origin Group con 2+ orígenes en diferentes AZs**
+> - **Origen primario falla** → CloudFront automáticamente usa el **origen secundario**
+> - **S3 como origen** → solo para contenido estático
+> - **EC2 como origen** → para contenido dinámico
+> - Origin failover requiere **mínimo 2 orígenes** configurados en el grupo
+   
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
+## Fault Tolerance Multi-AZ: Cálculo del Número Óptimo de Instancias
+
+### La fórmula clave
+
+```
+Requisito: mínimo N instancias funcionando INCLUSO si una AZ falla
+Número de AZs: Z
+
+Instancias por AZ = N / (Z - 1)
+
+→ N=6, Z=3: 6 / (3-1) = 6/2 = 3 instancias por AZ
+```
+
+---
+
+### Verificación de la solución correcta
+
+```
+3 instancias en eu-west-1a
+3 instancias en eu-west-1b
+3 instancias en eu-west-1c
+Total: 9 instancias
+
+Si eu-west-1a falla:
+eu-west-1b (3) + eu-west-1c (3) = 6 instancias ✅ mínimo cumplido
+```
+
+---
+
+### Análisis de todas las opciones
+
+| Distribución | Total | Si una AZ falla | ¿Cumple? | Costo |
+|---|---|---|---|---|
+| 2+2+2 | 6 | 4 instancias | ❌ (necesita 6) | Más barato pero inválido |
+| **3+3+3** | **9** | **6 instancias** | **✅** | **Óptimo** |
+| 6+6+0 | 12 | 6 instancias | ✅ | Más costoso que 3+3+3 |
+| 6+6+6 | 18 | 12 instancias | ✅ | Más costoso, over-provisioned |
+
+---
+
+### Fault Tolerance vs High Availability
+
+```
+High Availability                Fault Tolerance
+─────────────────                ───────────────
+Al menos 1 instancia             Mínimo N instancias
+funcionando                      funcionando siempre
+Sin degradación de servicio      Sin degradación de servicio
+requerida necesariamente         requerida ← más estricto
+```
+
+---
+
+### Regla mental para el examen
+
+> Para fault tolerance con pérdida de **1 AZ** entre **Z AZs**:
+> **Instancias por AZ = Mínimo requerido ÷ (Z - 1)**
+>
+> Ejemplo: 6 instancias mínimas, 3 AZs → 6÷2 = **3 por AZ** (9 total)
+   
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
+## Lambda@Edge + Kinesis: Procesamiento de Streaming en Tiempo Real
+
+### Los dos requisitos técnicos del escenario
+
+```
+1. Procesar datos CERCA del usuario (baja latencia geográfica)
+   → Lambda@Edge (ejecuta en edge locations de CloudFront)
+
+2. Procesar datos de STREAMING en tiempo real (clickstream)
+   → Amazon Kinesis (no Athena, no Route 53)
+```
+
+---
+
+### La arquitectura correcta
+
+```
+Usuarios globales
+      ↓
+CloudFront Edge Location (más cercana al usuario)
+      ↓
+Lambda@Edge ← ejecuta lógica en la ubicación del edge ✅
+      ↓
+Amazon Kinesis ← procesa streaming en tiempo real ✅
+      ↓
+Amazon S3 ← almacenamiento durable de resultados ✅
+```
+
+---
+
+### Por qué las otras opciones fallan
+
+| Opción | Error específico |
+|---|---|
+| **CloudFront + Lambda@Edge + Amazon Athena** | Athena es un servicio de **consultas SQL sobre datos en S3** (análisis batch). No procesa streaming en tiempo real |
+| **CloudFront + Route 53 latency + Kinesis** | Route 53 solo **enruta tráfico DNS**, no tiene capacidad de cómputo. No puede procesar datos cerca del usuario |
+| **CloudFront + Route 53 Geoproximity + Kinesis** | Mismo problema: Route 53 es solo routing, sin capacidad de procesamiento |
+
+---
+
+### Distinción clave: Route 53 vs Lambda@Edge
+
+```
+Route 53                         Lambda@Edge
+────────                         ──────────
+Solo DNS routing                 Ejecuta código en edge locations
+Decide A DÓNDE va el tráfico     PROCESA el tráfico en el edge
+Sin capacidad de cómputo         Función Lambda completa
+No reduce latencia de proceso    Latencia mínima (cercano al usuario)
+```
+
+---
+
+### Regla mental para el examen
+
+> - **Procesar datos cerca del usuario + baja latencia** → **Lambda@Edge**
+> - **Streaming en tiempo real (clickstream, logs)** → **Amazon Kinesis**
+> - **Consultas SQL sobre datos históricos en S3** → **Amazon Athena**
+> - **Route 53** → solo enrutamiento DNS, nunca procesamiento de datos
+   
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
+## AWS Control Tower: Gobernanza Multi-Cuenta con Mínimo Esfuerzo
+
+### Los requisitos del escenario
+
+```
+1. Crear múltiples cuentas AWS dentro de una Organización
+2. Configuraciones preaprobadas por el equipo de seguridad
+3. Estandarizar baselines y configuraciones de red
+4. Mínimo esfuerzo de implementación
+```
+
+---
+
+### La solución: AWS Control Tower Landing Zone
+
+```
+AWS Control Tower
+├── Landing Zone → entorno multi-cuenta bien arquitectado
+├── Account Factory → crea cuentas con configuraciones preaprobadas ✅
+├── Guardrails → políticas de gobernanza pre-empaquetadas
+│   ├── Preventivos (SCPs) → bloquean recursos no conformes
+│   └── Detectivos (AWS Config) → detectan no-conformidad
+└── Automatiza: CloudFormation + SCPs + AWS Config rules
+```
+
+**Tres formas de crear cuentas en Control Tower:**
+```
+1. Account Factory console (AWS Service Catalog)
+2. Enroll account feature
+3. Lambda + IAM roles (programático)
+```
+
+---
+
+### Por qué las otras opciones fallan
+
+| Opción | Por qué es incorrecta |
+|---|---|
+| **AWS RAM** | Comparte **recursos existentes** entre cuentas. No crea cuentas nuevas ni estandariza configuraciones |
+| **AWS Config aggregator + conformance packs** | Config agrega datos de cumplimiento pero **no provisiona cuentas**. Los conformance packs son solo colecciones de reglas Config |
+| **Systems Manager OpsCenter + Security Hub** | OpsCenter gestiona **items operacionales** (tickets). No crea cuentas. Security Hub detecta hallazgos de seguridad, no estandariza configuraciones |
+
+---
+
+### Mapa de servicios de gobernanza AWS
+
+```
+Crear y gobernar múltiples cuentas    → AWS Control Tower
+Políticas a nivel de organización     → AWS Organizations (SCPs)
+Detectar no-cumplimiento de recursos  → AWS Config
+Compartir recursos entre cuentas      → AWS Resource Access Manager
+Hallazgos de seguridad centralizados  → AWS Security Hub
+Gestionar operaciones/incidentes      → Systems Manager OpsCenter
+```
+
+---
+
+### Regla mental para el examen
+
+> - **Crear cuentas con configuraciones estandarizadas + guardrails** → **AWS Control Tower**
+> - **Control Tower = Landing Zone + Account Factory + Guardrails**
+> - **AWS Config** → audita/detecta, no provisiona cuentas
+> - **AWS RAM** → comparte recursos, no crea cuentas
+> - Cuando el escenario menciona "múltiples cuentas + gobernanza + mínimo esfuerzo" → **Control Tower**
+   
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
+
+## Respuesta: Spot Instances
+
+Dos señales clave en el escenario indican Spot:
+
+```
+Señal 1: "Solo necesarias hasta reducir el backlog"
+→ Uso temporal, no permanente
+
+Señal 2: "Si el proceso se interrumpe, otro instance lo retoma"
+→ La aplicación tolera interrupciones ← característica clave para Spot
+```
+
+---
+
+### Comparación de tipos de instancia
+
+| Tipo | Costo | Interrupción | Ideal para |
+|---|---|---|---|
+| **Spot** | Hasta 90% menos que On-Demand | Posible (2 min aviso) | Cargas tolerantes a fallos ✅ |
+| **On-Demand** | Precio estándar | No | Cargas variables sin compromiso |
+| **Reserved** | Descuento por contrato 1-3 años | No | Cargas predecibles y permanentes |
+| **Dedicated** | El más caro | No | Requisitos de compliance/licencias |
+
+---
+
+### Regla mental para el examen
+
+> - **Temporal + tolerante a interrupciones + costo-efectivo** → **Spot Instances**
+> - Si el escenario menciona que la app puede **recuperarse de fallos** → Spot es la respuesta
+> - **Backlog temporal** = no necesitas Reserved (compromiso largo plazo)
+   
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
+## Amazon Managed Prometheus + Managed Grafana: Monitoreo de Contenedores
+
+### Los requisitos del escenario
+
+```
+1. Usar las mismas herramientas (Prometheus + Grafana)
+2. Monitorear cargas en EC2+Docker, ECS, y EKS
+3. Solución recomendada (mínimo overhead de gestión)
+```
+
+---
+
+### La solución correcta y sus roles
+
+```
+Contenedores (EC2, ECS, EKS)
+         ↓ métricas
+Amazon Managed Service for Prometheus
+├── Recolecta métricas de contenedores ✅
+├── Compatible con modelo de datos Prometheus (PromQL)
+├── Serverless, sin gestionar infraestructura
+└── Workspace = fuente de datos
+         ↓ data source
+Amazon Managed Grafana
+├── Visualización y dashboards ✅
+├── Alertas
+└── Consultas sobre datos de Prometheus
+```
+
+> **Flujo correcto:** Prometheus recolecta → Grafana visualiza (no al revés)
+
+---
+
+### Por qué las otras opciones fallan
+
+| Opción | Error específico |
+|---|---|
+| **Grafana como fuente de datos en Prometheus** | **Roles invertidos**: Prometheus recolecta métricas, Grafana las visualiza usando Prometheus como data source |
+| **ECS cluster con Prometheus+Grafana en contenedores** | Posible pero requiere gestionar el cluster manualmente. Los servicios managed son la recomendación |
+| **VM Import/Export → EC2 con Prometheus+Grafana** | Mucho trabajo manual + debes gestionar el EC2. No es la recomendación para entornos cloud |
+
+---
+
+### Servicios Managed vs Self-managed
+
+```
+Self-managed (en EC2 o ECS)      AWS Managed Services
+───────────────────────          ────────────────────
+Tú gestionas el servidor         AWS gestiona la infraestructura
+Tú escalas manualmente           Escala automáticamente
+Tú aplicas parches               Sin parches que gestionar
+Mayor overhead operacional       Mínimo overhead ✅
+```
+
+---
+
+### Regla mental para el examen
+
+> - **Prometheus + Grafana en AWS sin gestionar infraestructura** → **Amazon Managed Service for Prometheus + Amazon Managed Grafana**
+> - **Prometheus** → recolecta métricas (es la fuente de datos)
+> - **Grafana** → visualiza datos usando Prometheus como data source
+> - Soporta: EC2+Docker, ECS, EKS (en EC2 y Fargate), entornos híbridos
+   
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
+## SQS + ApproximateNumberOfMessages: Evitar Pérdida de Requests
+
+### El problema del escenario
+
+```
+Problema actual:
+Requests llegan → EC2 intenta procesarlas → sobrecarga
+Auto Scaling lanza nuevas EC2 → pero ya se perdieron requests ❌
+
+La causa raíz: no hay buffer entre los requests y el procesamiento
+```
+
+---
+
+### La solución: SQS como buffer + scaling por métrica
+
+```
+Requests entrantes
+      ↓
+SQS Queue (buffer durable) ← requests NO se pierden ✅
+      ↓
+EC2 instances pollan la cola
+      ↓
+CloudWatch monitorea: ApproximateNumberOfMessages
+      ↓
+Auto Scaling ajusta instancias según backlog ✅
+```
+
+**Cálculo del backlog por instancia:**
+```
+Backlog per instance = ApproximateNumberOfMessages / instancias activas
+
+Ejemplo:
+├── 1,500 mensajes en cola / 10 instancias = 150 msg/instancia
+├── Latencia aceptable: 10s / tiempo proceso: 0.1s = 100 msg/instancia (target)
+└── 150 > 100 → Auto Scaling agrega 5 instancias más
+```
+
+---
+
+### Por qué las otras opciones fallan
+
+| Opción | Por qué no resuelve el problema |
+|---|---|
+| **Cluster Placement Group** | Mejora latencia entre nodos, pero no evita pérdida de requests. Además reemplaza Auto Scaling, que sí se necesita |
+| **Instancias más grandes + EFA** | Instancias más grandes no previenen pérdida en spikes grandes. EFA es para comunicación inter-nodos HPC, no para este caso |
+| **Aurora Serverless + Parallel Query** | Aurora Serverless escala la **base de datos**, no las instancias EC2. Parallel Query es para consultas analíticas |
+
+---
+
+### Regla mental para el examen
+
+> - **Requests perdidos por sobrecarga** → **SQS como buffer** (decoupling)
+> - **Escalar EC2 basado en cola SQS** → métrica **ApproximateNumberOfMessages**
+> - SQS garantiza que los mensajes **no se pierdan** aunque las instancias estén ocupadas
+> - **EFA** → HPC/comunicación inter-nodos, no para request buffering
+> - **Aurora Serverless** → escala DB, nunca EC2
+   
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
+
+## Respuesta: AWS Storage Gateway → S3 Glacier Deep Archive
+
+**Decisión 1: ¿Qué servicio para la transición desde tape backup?**
+```
+Organización usa tape backup on-premises
+         ↓
+AWS Storage Gateway (Tape Gateway)
+├── Reemplaza cintas físicas por cintas virtuales en AWS
+├── Compatible con aplicaciones de backup existentes ✅
+├── Sin cambiar workflows actuales
+└── Cifra y comprime datos automáticamente
+```
+
+**Decisión 2: ¿Qué clase de storage para 10 años + acceso 1-2 veces/año?**
+```
+S3 Glacier Flexible Retrieval    S3 Glacier Deep Archive
+──────────────────────────       ───────────────────────
+Retención largo plazo            Retención muy largo plazo ✅
+Acceso en minutos/horas          Acceso en horas (12-48h)
+Más costoso                      Hasta 75% más barato ✅
+                                 Ideal para 10 años ✅
+```
+
+---
+
+### Por qué las otras opciones fallan
+
+| Opción | Error |
+|---|---|
+| **Storage Gateway → Glacier Flexible Retrieval** | Válido pero más costoso que Deep Archive |
+| **Snowball Edge → Glacier Flexible Retrieval** | Snowball no integra directamente con Glacier. Además Flexible Retrieval es más caro |
+| **S3 + lifecycle → Glacier Flexible Retrieval** | Difícil integrar tape backup directamente con S3 sin Storage Gateway. Además Flexible Retrieval no es el más costo-efectivo |
+
+---
+
+### Regla mental para el examen
+
+> - **Tape backup on-premises → AWS** → **Storage Gateway (Tape Gateway)**
+> - **Archivado 10+ años + mínimo costo** → **S3 Glacier Deep Archive**
+> - Acceso ocasional (1-2 veces/año) tolera tiempo de recuperación de horas → Deep Archive es suficiente
+   
+
+
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
+## Respuesta: AWS CloudTrail
+
+```
+AWS CloudTrail registra:
+├── Todas las llamadas API a recursos AWS ✅
+├── Acciones via consola, SDK, CLI y servicios AWS
+├── Quién hizo qué, cuándo y desde dónde
+└── Datos para auditoría y compliance ✅
+```
+
+---
+
+### Por qué los otros servicios no aplican
+
+| Servicio | Propósito real |
+|---|---|
+| **Amazon CloudWatch** | Monitorea **métricas y logs** de rendimiento. No rastrea API calls específicas |
+| **AWS X-Ray** | **Debugging y tracing** de microservicios. No audita API calls de infraestructura |
+| **Redshift Spectrum** | **Feature de Redshift** para consultar datos en S3. No es un servicio de monitoreo |
+| **AWS CloudTrail** | ✅ Registra toda la actividad API en tu cuenta AWS |
+
+---
+
+### Regla mental para el examen
+
+> - **Auditoría de API calls + compliance** → **AWS CloudTrail**
+> - **Métricas de rendimiento + alarmas** → **Amazon CloudWatch**
+> - **Debugging de microservicios + tracing** → **AWS X-Ray**
+   
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
+
+## Respuesta: AWS Application Migration Service (MGN)
+
+```
+Rehosting (lift-and-shift) de servidores físicos completos:
+├── Aplicaciones
+├── Datos
+└── Sistemas operativos
+         ↓
+AWS MGN
+├── Replica servidores on-premises → AWS automáticamente
+├── Convierte y lanza servidores en AWS cuando estés listo
+├── Mínima interrupción al negocio ✅
+└── Funciona con servidores físicos y virtuales
+```
+
+---
+
+### Por qué las otras opciones no aplican
+
+| Servicio | Propósito real | ¿Aplica aquí? |
+|---|---|---|
+| **AWS DMS** | Migración de **bases de datos** solamente | ❌ No migra apps ni OS |
+| **AWS Snowball** | Transferencia física de **datos** en volumen | ❌ No replica aplicaciones en ejecución |
+| **AWS DataSync** | Transferencia/sincronización de **datos** | ❌ No replica apps ni OS. Replicación horaria causa interrupción |
+| **AWS MGN** | **Lift-and-shift completo** (apps + datos + OS) | ✅ |
+
+---
+
+### Regla mental para el examen
+
+> - **Rehost completo (apps + OS + datos)** → **AWS MGN**
+> - **Solo base de datos** → **AWS DMS**
+> - **Solo datos/archivos** → **AWS DataSync o Snowball**
+> - **Snowball** → volúmenes masivos sin conexión de red suficiente
+   
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
+### Aurora Replicas: Mejorando la Disponibilidad de la Base de Datos
+
+**¿Por qué Aurora Replicas?**
+
+```
+Aurora Replicas:
+├── Comparten el mismo volumen de almacenamiento que el primario
+├── Actualizaciones del primario visibles inmediatamente en réplicas
+├── En caso de fallo del primario → réplica puede promoverse automáticamente
+└── También mejoran rendimiento de lecturas (bonus)
+```
+
+---
+
+### Por qué las otras opciones fallan
+
+| Opción | Por qué es incorrecta |
+|---|---|
+| **Auto Scaling groups + ELB para Aurora** | Aurora es un servicio **managed** de RDS. No se despliega en EC2 instances manuales |
+| **Hash Joins** | Optimización de **performance de queries** con equijoins. No mejora disponibilidad |
+| **Asynchronous Key Prefetch** | Mejora **performance de queries** con joins entre índices. No mejora disponibilidad |
+
+---
+
+### Nota importante del examen
+
+> La solución **óptima** para disponibilidad en Aurora sería **Multi-AZ**, pero como no estaba disponible en las opciones, **Aurora Replicas** es la siguiente mejor opción ya que pueden **promoverse a primario** automáticamente en caso de fallo.
+
+---
+
+### Regla mental para el examen
+
+> - **Alta disponibilidad Aurora** → **Multi-AZ** (primero) o **Aurora Replicas** (segundo)
+> - **Escalar lecturas** → **Aurora Replicas**
+> - **Hash Joins / Key Prefetch** → siempre relacionados con **performance de queries**, nunca con disponibilidad
+   
+
+
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
+### Escalando Kinesis Data Streams: Aumentar Shards con UpdateShardCount
+
+**¿Por qué aumentar el número de shards?**
+
+Cada shard en Kinesis tiene una capacidad fija:
+```
+Por shard:
+├── Entrada: 1 MB/s o 1,000 registros/s
+└── Salida: 2 MB/s
+
+Si el data rate supera la capacidad → performance degradada ❌
+Solución: más shards = más capacidad ✅
+```
+
+**El comando correcto:**
+```
+UpdateShardCount → aumenta shards (shard split)
+MergeShard      → reduce shards (dos shards → uno)
+```
+
+---
+
+### Por qué las otras opciones fallan
+
+| Opción | Por qué es incorrecta |
+|---|---|
+| **MergeShard** | **Reduce** capacidad al combinar shards → empeora el problema |
+| **Reemplazar con Data Firehose** | Firehose no tiene mayor throughput que Kinesis Streams. Streams escala sin límite añadiendo shards |
+| **Step Scaling** | Step Scaling es una política de **Auto Scaling para EC2**. No existe en Kinesis Data Streams |
+
+---
+
+### Regla mental para el examen
+
+> - **Performance degradada en Kinesis por alto data rate** → **aumentar shards con UpdateShardCount**
+> - **Reducir costos en Kinesis con bajo tráfico** → **MergeShard** (menos shards)
+> - Kinesis cobra **por shard**, más shards = más costo pero más capacidad
+> - **Step Scaling** → exclusivo de EC2 Auto Scaling, no aplica a Kinesis
+   
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
+
+   
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
+
+   
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+   
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
+
+   
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
+
+   
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
+
+   
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
+
+   
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
+
+   
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
+
+   
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
+
+   
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
+
+   
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
+
+   
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
+
+   
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
 
    
 &nbsp;   
