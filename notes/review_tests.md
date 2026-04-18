@@ -1,3 +1,12 @@
+
+
+---
+
+# CSAA – Design Resilient Architectures
+
+---
+
+
 ## Amazon S3 Notifications + SNS Fanout Pattern
 
 ### ¿Cómo funcionan las notificaciones en S3?
@@ -76,217 +85,7 @@ Así, con un solo destino desde S3, logras que el mensaje llegue a múltiples co
 
 &nbsp;
 
-## Amazon Aurora: Endpoints y Conexiones
 
-### ¿Qué es Aurora y por qué usa endpoints?
-
-Aurora no es una sola instancia de base de datos, sino un **cluster** (grupo) de instancias. Para no obligarte a recordar las IPs/hostnames de cada instancia ni programar tu propia lógica de conexión, Aurora usa **endpoints**: direcciones intermediarias que apuntan automáticamente a la instancia correcta.
-
----
-
-### Tipos de Endpoints
-
-| Endpoint | También llamado | ¿A dónde apunta? | Uso típico |
-|---|---|---|---|
-| **Cluster endpoint** | Writer endpoint | Instancia primaria (lectura/escritura) | DDL, DML, operaciones de escritura |
-| **Reader endpoint** | — | Reparte carga entre todas las réplicas | Consultas de solo lectura |
-| **Custom endpoint** | — | Subconjunto específico de instancias | Casos de uso especializados |
-| **Instance endpoint** | — | Una instancia específica | Diagnóstico, tuning |
-
----
-
-### El concepto clave: Custom Endpoints
-
-El texto resuelve este escenario: **tienes instancias de alta y baja capacidad, y quieres separar el tráfico de producción del de reportes.**
-
-```
-Tráfico de producción  →  Custom Endpoint A  →  Instancias de ALTA capacidad
-Consultas de reportes  →  Custom Endpoint B  →  Instancias de BAJA capacidad
-```
-
-Esto es posible porque un **custom endpoint** te permite agrupar instancias según criterios propios, como:
-- Clase de instancia (`db.r5.4xlarge` vs `db.t3.medium`)
-- Grupo de parámetros específico
-- Cualquier subconjunto lógico que definas
-
----
-
-### ¿Por qué las otras opciones están mal?
-
-**❌ Solo usar el reader endpoint para todo**
-> El reader endpoint solo balancea carga entre réplicas, pero no distingue entre instancias de alta o baja capacidad. No cumple el requisito de separar cargas por capacidad.
-
-**❌ Cluster endpoint para producción + reader endpoint para reportes**
-> El cluster endpoint apunta a la instancia primaria (escritura). No dirige a instancias de alta capacidad específicas, y mezclar endpoints sin criterio de capacidad no resuelve el problema.
-
-**❌ No hacer nada, Aurora lo hace automáticamente**
-> Aurora **no** separa tráfico por capacidad de forma automática. Eso es responsabilidad tuya mediante custom endpoints.
-
----
-
-### Resumen mental
-
-Piensa en los endpoints como **recepcionistas especializados**:
-- El *writer* siempre te manda al jefe (instancia primaria).
-- El *reader* te manda a cualquier asistente disponible (réplicas).
-- El *custom* te manda exactamente al equipo que tú configuraste previamente.
-
-&nbsp;
-
-
-&nbsp;
-
-
-&nbsp;
-
-## Seguridad de Variables de Entorno en AWS Lambda
-
-### ¿Cómo funciona el cifrado en Lambda por defecto?
-
-Cuando creas una función Lambda con variables de entorno, AWS **automáticamente las cifra** usando KMS. Pero hay un detalle importante:
-
-```
-Cifrado por defecto (KMS key por defecto)
-├── ✅ Los valores están cifrados en reposo
-└── ❌ Siguen siendo VISIBLES en texto plano en la consola Lambda
-         para cualquier usuario con acceso
-```
-
-Este es el problema central del escenario: **cifrado ≠ privacidad en la consola**.
-
----
-
-### La solución: KMS key propia + Encryption Helpers
-
-Al crear tu propia KMS key y usar los **encryption helpers** de Lambda:
-
-```
-Tu KMS Key propia
-├── ✅ Datos cifrados en reposo
-├── ✅ Valores NO visibles en texto plano en la consola
-├── ✅ Tú controlas quién tiene acceso a la key
-├── ✅ Puedes rotar, deshabilitar y auditar la key
-└── ✅ Puedes definir controles de acceso granulares
-```
-
----
-
-### Comparación de opciones
-
-| Opción | Veredicto | Razón |
-|---|---|---|
-| "Lambda ya cifra por defecto, no hay que hacer nada" | ❌ | El cifrado por defecto existe, pero los valores siguen visibles en la consola para otros usuarios |
-| "Crear una KMS key propia y usar encryption helpers" | ✅ | Máxima seguridad: cifrado real + acceso controlado + invisible en consola |
-| "Usar SSL con CloudHSM" | ❌ | SSL solo cifra datos **en tránsito**, no en reposo. Los valores seguirían visibles |
-| "Lambda no cifra, usar EC2" | ❌ | Falso. Lambda sí cifra variables de entorno |
-
----
-
-### La distinción clave que evalúa este examen
-
-```
-Cifrado por defecto (default KMS key)
-│
-├── Protege los datos en disco ✅
-└── Pero cualquier usuario con acceso a la consola
-    puede VER los valores → No es suficiente ❌
-
-Cifrado con KMS key propia + Encryption Helpers
-│
-├── Protege los datos en disco ✅
-└── Los valores aparecen CIFRADOS incluso en la consola ✅
-    Solo quien tenga permiso sobre esa KMS key puede descifrarlos
-```
-
----
-
-### Regla mental para el examen
-
-> Cuando el requisito sea **máxima seguridad** para variables sensibles en Lambda → siempre elige **KMS key propia + encryption helpers**, no la key por defecto.
-
-La key por defecto es conveniente, pero la key propia te da **control total**: crear, rotar, deshabilitar, auditar y restringir acceso.
-
-&nbsp;
-
-
-&nbsp;
-
-
-&nbsp;
-
-## Almacenamiento Hot vs Cold para ML en AWS
-
-### Clasificación del almacenamiento por temperatura
-
-```
-HOT   → Datos frecuentemente accedidos → Alto rendimiento, mayor costo
-WARM  → Datos ocasionalmente accedidos → Balance rendimiento/costo
-COLD  → Datos raramente accedidos      → Bajo rendimiento, mínimo costo
-```
-
----
-
-### Los dos requisitos del escenario
-
-| Requisito | Característica clave | Servicio correcto |
-|---|---|---|
-| Hot storage | Alto rendimiento + **paralelo** + concurrente | **Amazon FSx for Lustre** |
-| Cold storage | **Costo-efectivo** + archivado | **Amazon S3 (Glacier)** |
-
----
-
-### ¿Por qué FSx for Lustre para hot storage?
-
-Lustre es un sistema de archivos **paralelo y distribuido** (open-source) que:
-- Divide los datos entre múltiples servidores de red simultáneamente
-- Elimina cuellos de botella en workloads de alto procesamiento
-- Es el estándar de facto para **Machine Learning y HPC** (High Performance Computing)
-
-```
-Dataset → FSx for Lustre → Múltiples nodos procesan en paralelo
-                           └── Nodo 1, Nodo 2, Nodo 3... (concurrente)
-```
-
-### ¿Por qué S3 para cold storage?
-
-S3 ofrece una jerarquía de almacenamiento que lo hace ideal para datos fríos:
-
-```
-S3 Standard          → Hot data
-S3 Standard-IA       → Warm data
-S3 Glacier           → Cold data    ← aplica aquí
-S3 Glacier Deep Archive → Coldest   ← o aquí (más barato aún)
-```
-
----
-
-### Por qué las otras opciones fallan
-
-**❌ FSx for Lustre + EBS Provisioned IOPS (io1)**
-> EBS io1 está diseñado para hot data de I/O intensivo, no para archivado frío. El EBS Cold HDD existe, pero es significativamente más caro que S3 Glacier, por lo que no cumple el requisito de "cost-effective".
-
-**❌ Amazon EFS + S3**
-> EFS sí permite acceso concurrente, pero **no tiene sistema de archivos paralelo**. Para workloads de ML que necesitan máximo rendimiento, EFS no es suficiente. FSx for Lustre lo supera ampliamente en performance.
-
-**❌ FSx for Windows File Server + S3**
-> FSx for Windows usa protocolo **SMB + NTFS**, diseñado para entornos Windows empresariales. No tiene arquitectura de sistema de archivos paralelo como Lustre.
-
----
-
-### Regla mental para el examen
-
-> - "Alto rendimiento + paralelo + ML/HPC" → **FSx for Lustre**
-> - "Windows + Active Directory + SMB" → **FSx for Windows**
-> - "Archivado barato + cold storage" → **S3 Glacier / Glacier Deep Archive**
-> - "Almacenamiento compartido general en la nube" → **EFS**
-
-&nbsp;
-
-
-&nbsp;
-
-
-&nbsp;
 ## RDS Multi-AZ Failover: Alta Disponibilidad ante Fallos de Zona
 
 ### El problema del escenario
@@ -350,542 +149,6 @@ Escala performance              Garantiza disponibilidad
 
 &nbsp;
 
-## Amazon Macie: Protección de Datos Sensibles en S3
-
-### ¿Qué es Amazon Macie?
-
-Es un servicio de seguridad **impulsado por Machine Learning** que automáticamente:
-- **Descubre** datos sensibles en S3
-- **Clasifica** la información (PII, propiedad intelectual, etc.)
-- **Monitorea** políticas de privacidad y seguridad en buckets
-- **Alerta** sobre violaciones potenciales
-
----
-
-### Los dos tipos de hallazgos (findings) que genera Macie
-
-```
-Policy Findings                     Sensitive Data Findings
-───────────────                     ───────────────────────
-Violaciones de política             Datos sensibles encontrados
-Problemas de seguridad/privacidad   en objetos S3 específicos
-en buckets S3                       
-Monitoreo continuo y automático     Requiere configurar un
-                                    "sensitive data discovery job"
-```
-
-Ambos requisitos del escenario están cubiertos:
-- ✅ Verificar datos con PII → **Sensitive Data Findings**
-- ✅ Alertar sobre violaciones de privacidad → **Policy Findings**
-
----
-
-### Los otros servicios y por qué no aplican
-
-| Servicio | Para qué sirve realmente | ¿Aplica al escenario? |
-|---|---|---|
-| **Amazon Polly** | Convierte texto en voz (text-to-speech) | ❌ No tiene relación con seguridad |
-| **Amazon Kendra** | Búsqueda empresarial con IA | ❌ Busca contenido, no monitorea seguridad |
-| **Amazon Fraud Detector** | Detecta fraudes en transacciones online | ❌ No analiza PII en S3 |
-| **Amazon Macie** | Descubre y protege datos sensibles en S3 | ✅ Exactamente esto |
-
----
-
-### Regla mental para el examen
-
-> Siempre que veas estas palabras juntas en una pregunta → piensa en **Macie**:
-> - PII (Personally Identifiable Information)
-> - Datos sensibles en S3
-> - Compliance / políticas de privacidad
-> - Clasificación automática de datos
-> - Alertas de seguridad sobre buckets S3
-
- &nbsp;   
- 
- &nbsp;   
- 
- &nbsp;
-
-## Aurora MySQL Native Functions + Lambda: Reacción a Cambios de Datos
-
-### El concepto clave: RDS Events vs. Database Events
-
-Esta es la trampa central de la pregunta:
-
-```
-RDS Event Subscriptions          Aurora Native Functions
-───────────────────────          ───────────────────────
-Eventos de INFRAESTRUCTURA       Eventos de DATOS
-├── Failover                     ├── INSERT
-├── Mantenimiento                ├── UPDATE
-├── Backup completado            └── DELETE  ← aplica aquí
-└── Cambio de parámetros
-❌ NO detecta DELETE de filas    ✅ SÍ detecta cambios en datos
-```
-
----
-
-### La solución correcta paso a paso
-
-```
-1. Vehículo vendido
-       ↓
-2. DELETE en tabla Aurora MySQL
-       ↓
-3. Native function (lambda_sync / lambda_async) dispara automáticamente
-       ↓
-4. AWS Lambda recibe los datos del listing eliminado
-       ↓
-5. Lambda envía datos a SQS Queue
-       ↓
-6. Sistema distribuido consume el mensaje de SQS
-```
-
-Aurora MySQL ofrece dos funciones nativas para invocar Lambda:
-
-| Función | Comportamiento |
-|---|---|
-| `lambda_sync` | Invocación **síncrona** → espera respuesta de Lambda |
-| `lambda_async` | Invocación **asíncrona** → no espera respuesta |
-
----
-
-### Por qué las 3 opciones con "RDS Event Subscription" están mal
-
-Las tres opciones incorrectas comparten el mismo error fundamental: usan **RDS Event Subscriptions**, que solo capturan eventos operacionales/infraestructura, **nunca cambios en los datos** como un `DELETE` en una tabla.
-
-| Opción incorrecta | Error adicional |
-|---|---|
-| RDS Events → SNS → SQS → Lambda | RDS Events no captura `DELETE` de filas |
-| RDS Events → SQS → SNS → Lambda | Mismo problema + el fanout va en dirección incorrecta (SQS no hace fanout a SNS) |
-| RDS Events → Lambda → SQS | Mismo problema de raíz |
-
----
-
-### Regla mental para el examen
-
-> - Reaccionar a **cambios en datos** (INSERT/UPDATE/DELETE) en Aurora MySQL → **Native Functions** (`lambda_sync`/`lambda_async`)
-> - Reaccionar a **eventos de infraestructura** RDS (failover, backup, mantenimiento) → **RDS Event Subscriptions**
- 
- &nbsp;   
- 
- &nbsp;   
- 
- &nbsp;
-
-## RDS Enhanced Monitoring: Visibilidad Granular del Sistema Operativo
-
-### El problema central del escenario
-
-Se necesita monitorear **por proceso/thread** el uso de CPU y memoria. Esto requiere visibilidad a nivel de sistema operativo, no solo métricas agregadas.
-
----
-
-### CloudWatch estándar vs Enhanced Monitoring
-
-```
-CloudWatch estándar              Enhanced Monitoring
-───────────────────              ───────────────────
-Datos del HIPERVISOR             Datos del AGENTE en la instancia
-Vista agregada de la VM          Vista granular del OS
-CPU total de la instancia        CPU por proceso/thread individual
-Menos preciso en instancias      Más preciso y detallado
-pequeñas (comparten hipervisor)  independiente del hipervisor
-```
-
-Enhanced Monitoring responde exactamente al requisito:
-- ✅ % de CPU por cada proceso
-- ✅ Memoria total consumida por cada proceso
-- ✅ Métricas en tiempo real
-- ✅ Datos retenidos 30 días en CloudWatch Logs (ajustable)
-
----
-
-### Por qué las otras opciones fallan
-
-| Opción | Por qué no cumple el requisito |
-|---|---|
-| **CPU% y MEM% en consola RDS** | Esas métricas **no están disponibles** directamente en la consola RDS como lo describe la opción |
-| **CloudWatch estándar** | Solo ve CPU agregada desde el hipervisor, no por proceso individual |
-| **Script custom → CloudWatch** | No tienes acceso directo al OS de RDS (a diferencia de EC2). No puedes instalar agentes o scripts personalizados |
-
----
-
-### El punto clave sobre RDS vs EC2
-
-```
-EC2                              RDS
-───                              ───
-✅ Acceso al OS                  ❌ Sin acceso directo al OS
-✅ Puedes instalar agentes        ❌ No puedes instalar scripts
-✅ Custom CloudWatch agent        ✅ Enhanced Monitoring (agente
-                                    gestionado por AWS)
-```
-
-> En RDS, AWS gestiona el OS por ti. Por eso la única forma de obtener métricas a nivel de proceso es mediante **Enhanced Monitoring**, que usa un agente que AWS instala y administra automáticamente.
-
----
-
-### Regla mental para el examen
-
-> - Monitorear **procesos/threads individuales** en RDS → **Enhanced Monitoring**
-> - Monitorear **métricas generales** de la instancia RDS → **CloudWatch**
-> - Monitorear **queries lentas o rendimiento SQL** → **RDS Performance Insights**
- 
- &nbsp;   
- 
- &nbsp;   
- 
- &nbsp;
-
-## RDS Enhanced Monitoring: Visibilidad Granular del Sistema Operativo
-
-### El problema central del escenario
-
-Se necesita monitorear **por proceso/thread** el uso de CPU y memoria. Esto requiere visibilidad a nivel de sistema operativo, no solo métricas agregadas.
-
----
-
-### CloudWatch estándar vs Enhanced Monitoring
-
-```
-CloudWatch estándar              Enhanced Monitoring
-───────────────────              ───────────────────
-Datos del HIPERVISOR             Datos del AGENTE en la instancia
-Vista agregada de la VM          Vista granular del OS
-CPU total de la instancia        CPU por proceso/thread individual
-Menos preciso en instancias      Más preciso y detallado
-pequeñas (comparten hipervisor)  independiente del hipervisor
-```
-
-Enhanced Monitoring responde exactamente al requisito:
-- ✅ % de CPU por cada proceso
-- ✅ Memoria total consumida por cada proceso
-- ✅ Métricas en tiempo real
-- ✅ Datos retenidos 30 días en CloudWatch Logs (ajustable)
-
----
-
-### Por qué las otras opciones fallan
-
-| Opción | Por qué no cumple el requisito |
-|---|---|
-| **CPU% y MEM% en consola RDS** | Esas métricas **no están disponibles** directamente en la consola RDS como lo describe la opción |
-| **CloudWatch estándar** | Solo ve CPU agregada desde el hipervisor, no por proceso individual |
-| **Script custom → CloudWatch** | No tienes acceso directo al OS de RDS (a diferencia de EC2). No puedes instalar agentes o scripts personalizados |
-
----
-
-### El punto clave sobre RDS vs EC2
-
-```
-EC2                              RDS
-───                              ───
-✅ Acceso al OS                  ❌ Sin acceso directo al OS
-✅ Puedes instalar agentes        ❌ No puedes instalar scripts
-✅ Custom CloudWatch agent        ✅ Enhanced Monitoring (agente
-                                    gestionado por AWS)
-```
-
-> En RDS, AWS gestiona el OS por ti. Por eso la única forma de obtener métricas a nivel de proceso es mediante **Enhanced Monitoring**, que usa un agente que AWS instala y administra automáticamente.
-
----
-
-### Regla mental para el examen
-
-> - Monitorear **procesos/threads individuales** en RDS → **Enhanced Monitoring**
-> - Monitorear **métricas generales** de la instancia RDS → **CloudWatch**
-> - Monitorear **queries lentas o rendimiento SQL** → **RDS Performance Insights**
- 
- &nbsp;   
- 
- &nbsp;   
- 
- &nbsp;
-
-## DynamoDB Streams + Lambda + SNS: Feature de Notificaciones
-
-### El flujo de la solución correcta
-
-```
-Usuario actualiza su perfil
-         ↓
-   DynamoDB Table
-         ↓
-   DynamoDB Stream  ←── debe habilitarse manualmente
-         ↓
-  Lambda (trigger)  ←── necesita IAM role con permisos
-         ↓
-     SNS Topic
-         ↓
-  Suscriptores reciben email
-```
-
----
-
-### ¿Qué es DynamoDB Streams?
-
-Es un flujo **ordenado cronológicamente** de todos los cambios en una tabla DynamoDB. Captura:
-- Creaciones (INSERT)
-- Actualizaciones (UPDATE)
-- Eliminaciones (DELETE)
-
-Cada cambio genera un **stream record** con la clave primaria del ítem modificado. Opcionalmente puedes capturar la imagen "antes" y "después" del cambio.
-
-> ⚠️ **DynamoDB Streams NO está habilitado por defecto.** Debe activarse manualmente.
-
----
-
-### Por qué las otras opciones fallan
-
-| Opción | Error específico |
-|---|---|
-| **DAX + trigger + Lambda + SNS** | DAX es un **caché de lectura en memoria** (acelera reads), no captura cambios de datos. No sirve para este caso |
-| **KCL + Kinesis Adapter + SNS** | Solución técnicamente válida, pero **omite habilitar DynamoDB Streams** primero |
-| **Lambda + Kinesis Adapter + SNS** | Mismo problema: asume que el Stream ya está activo, pero no menciona habilitarlo |
-
-Las dos últimas opciones son variantes del mismo error: **dar por sentado que Streams está habilitado**.
-
----
-
-### DAX vs DynamoDB Streams: distinción clave
-
-```
-DAX (DynamoDB Accelerator)       DynamoDB Streams
-──────────────────────────       ─────────────────
-Caché en memoria                 Registro de cambios
-Mejora latencia de LECTURA       Captura eventos de escritura
-Responde consultas rápido        Alimenta triggers y pipelines
-No detecta cambios               Ordenado cronológicamente
-```
-
----
-
-### Regla mental para el examen
-
-> - Reaccionar a **cambios en DynamoDB** en tiempo real → **DynamoDB Streams + Lambda trigger**
-> - **Notificar a múltiples suscriptores** → **SNS Topic**
-> - **Acelerar lecturas** en DynamoDB → **DAX**
-> - DynamoDB Streams **no se activa solo** → siempre debe habilitarse explícitamente
-  
- &nbsp;   
- 
- &nbsp;   
- 
- &nbsp;
-
-## Security Groups: Acceso SSH desde una IP específica
-
-### La respuesta correcta y por qué
-
-```
-Inbound Rule:
-├── Protocol: TCP      ← SSH usa TCP, no UDP
-├── Port: 22           ← Puerto estándar de SSH
-└── Source: 110.238.98.71/32  ← /32 = exactamente una IP
-```
-
----
-
-### Los 4 conceptos que evalúa esta pregunta
-
-**1. Inbound vs Outbound**
-```
-Inbound  → tráfico que ENTRA a la instancia  ← necesario para SSH
-Outbound → tráfico que SALE de la instancia
-```
-Alguien se conecta *hacia* tu instancia por SSH → regla **Inbound**.
-
-**2. TCP vs UDP**
-```
-SSH  → TCP puerto 22  ✅
-DNS  → UDP puerto 53
-RDP  → TCP puerto 3389
-```
-SSH siempre usa **TCP**. Especificar UDP simplemente no funcionaría.
-
-**3. Notación CIDR /32**
-```
-/32  → 1 IP exacta        (110.238.98.71/32)     ← aquí
-/24  → 256 IPs            (110.238.98.0/24)
-/16  → 65,536 IPs         (110.238.0.0/16)
-/0   → Todas las IPs      (0.0.0.0/0)
-```
-
-**4. Security Groups son stateful**
-> Como los Security Groups son **stateful**, el tráfico de retorno (respuesta SSH) se permite automáticamente, sin necesidad de una regla Outbound explícita.
-
----
-
-### Por qué cada opción incorrecta falla
-
-| Opción | Error |
-|---|---|
-| Inbound, **UDP**, port 22, /32 | SSH usa TCP, no UDP |
-| **Outbound**, TCP, port 22, /32 | Dirección incorrecta; SSH entrante necesita regla Inbound |
-| **Outbound**, UDP, port 22, 0.0.0.0/0 | Dos errores: Outbound + UDP + abre a todas las IPs |
-
----
-
-### Regla mental para el examen
-
-> SSH → siempre **Inbound + TCP + puerto 22 + /32** para una IP específica
-  
- &nbsp;   
- 
- &nbsp;   
- 
- &nbsp;
-
-## API Gateway: Throttling y Caché para Manejar Traffic Spikes
-
-### El problema del escenario
-
-Un pico masivo de tráfico puede **sobrecargar los sistemas backend** (Lambda, bases de datos, etc.). Se necesita protegerlos sin migrar a otra arquitectura.
-
----
-
-### La solución: Throttling + Result Caching en API Gateway
-
-Estas dos funciones actúan como **escudo protector** del backend:
-
-```
-Internet → API Gateway → Lambda → Backend
-              ↑
-    [Throttling + Cache]
-    Filtra y absorbe el tráfico
-    antes de que llegue al backend
-```
-
-**Throttling (límite de solicitudes):**
-```
-Rate limit  → máx. requests por segundo (ej: 1,000 req/s)
-Burst limit → pico momentáneo permitido  (ej: 2,000 req/s por segundos)
-Excede límite → respuesta HTTP 429 (Too Many Requests)
-               → el SDK de API Gateway reintenta automáticamente
-```
-
-**Result Caching:**
-```
-Primera request  → va al backend → respuesta guardada en caché
-Requests siguientes → API Gateway responde desde caché
-                      sin tocar el backend
-```
-
----
-
-### Por qué las otras opciones no son correctas
-
-| Opción | Por qué falla |
-|---|---|
-| **Migrar a EC2 + ELB + Auto Scaling** | Innecesario. Lambda + API Gateway ya es escalable por diseño |
-| **CloudFront frente a API Gateway** | CloudFront mejora latencia de entrega de contenido estático, pero no protege el backend de requests excesivos |
-| **Mover Lambda a una VPC** | Irrelevante para el problema. VPC controla networking/aislamiento, no manejo de tráfico |
-
----
-
-### Throttling vs Caché: roles distintos pero complementarios
-
-```
-Throttling                       Result Caching
-──────────                       ──────────────
-Limita CUÁNTAS requests          Limita CUÁNTAS requests
-pasan por segundo                llegan al backend
-                                 
-Protege contra floods            Protege contra requests
-y ataques de volumen             repetidas e idénticas
-
-Responde 429 al exceso           Responde desde memoria
-```
-
----
-
-### Regla mental para el examen
-
-> - Proteger backend de **picos de tráfico** en API Gateway → **Throttling + Caching**
-> - **Throttling** → controla la tasa de requests
-> - **Caching** → evita llamadas repetidas al backend
-> - **CloudFront** → latencia y distribución de contenido, no protección de backend
-  
-&nbsp;   
-
-&nbsp;   
-
-&nbsp;
-
-## FSx for NetApp ONTAP: Block Storage Multi-AZ para Windows
-
-### Los dos requisitos clave del escenario
-
-| Requisito | Implicación |
-|---|---|
-| **Alta disponibilidad multi-AZ** | El storage debe sobrevivir la caída de una AZ |
-| **Block storage de baja latencia** | Se necesita protocolo de bloque (iSCSI), no file storage genérico |
-
----
-
-### ¿Por qué FSx for NetApp ONTAP es la respuesta?
-
-Es el único servicio de AWS que combina los tres elementos necesarios simultáneamente:
-
-```
-FSx for NetApp ONTAP
-├── ✅ Multi-AZ nativo → alta disponibilidad entre zonas
-├── ✅ Protocolo iSCSI → block storage de baja latencia
-├── ✅ Compatible con Windows Server (también SMB, NFS)
-└── ✅ Latencia sub-millisegundo con almacenamiento SSD
-```
-
----
-
-### Comparación de todas las opciones
-
-| Servicio | Protocolo | Multi-AZ | Block Storage | Windows | Veredicto |
-|---|---|---|---|---|---|
-| **FSx for Windows File Server** | SMB | ✅ | ❌ Solo file | ✅ | ❌ No soporta iSCSI/block |
-| **Amazon EFS** | NFS | ✅ | ❌ Solo file | ❌ Optimizado Linux | ❌ No apto para Windows |
-| **Amazon S3** | HTTP/REST | ✅ | ❌ Object storage | ⚠️ | ❌ No es block storage |
-| **FSx for NetApp ONTAP** | iSCSI, SMB, NFS | ✅ | ✅ | ✅ | ✅ Cumple todo |
-
----
-
-### Los tres tipos de almacenamiento y sus protocolos
-
-```
-Block Storage   → iSCSI, EBS          → baja latencia, apps críticas
-File Storage    → SMB, NFS            → archivos compartidos
-Object Storage  → HTTP/REST (S3)      → datos no estructurados, backups
-```
-
-> Una aplicación de trading financiero necesita **block storage** por su naturaleza transaccional y requerimiento de latencia mínima.
-
----
-
-### Diferencia entre los dos FSx para Windows
-
-```
-FSx for Windows File Server      FSx for NetApp ONTAP
-───────────────────────          ────────────────────
-Solo protocolo SMB               SMB + NFS + iSCSI
-Solo file storage                File + Block storage
-Exclusivo para Windows           Multi-OS (Win, Linux, Mac)
-Sin iSCSI                        ✅ iSCSI nativo
-```
-
----
-
-### Regla mental para el examen
-
-> - **Block storage + Multi-AZ + Windows + iSCSI** → **FSx for NetApp ONTAP**
-> - **File storage compartido solo para Windows** → **FSx for Windows File Server**
-> - **File storage para Linux/multi-OS** → **EFS**
-> - **Object storage escalable** → **S3**
-   
-&nbsp;   
-
-&nbsp;   
-
-&nbsp;
 
 ## Auto Scaling + Multi-AZ: Alta Disponibilidad y Fault Tolerance
 
@@ -953,301 +216,6 @@ AZ-A(0) + AZ-B(6) = hasta 6 → performance mantenida ✅
 
 &nbsp;
 
-## CloudFront Signed Cookies vs Signed URLs: Control de Acceso Privado
-
-### La decisión clave del escenario
-
-Dos requisitos determinan la solución:
-1. Acceso a **múltiples archivos** privados
-2. **Sin cambiar las URLs** actuales
-
----
-
-### Signed URLs vs Signed Cookies: cuándo usar cada uno
-
-```
-Signed URLs                      Signed Cookies
-───────────                      ──────────────
-Acceso a UN archivo individual   Acceso a MÚLTIPLES archivos ✅
-Cambia la URL del recurso        NO cambia las URLs actuales ✅
-Útil para descargas únicas       Ideal para áreas de suscriptores
-Soporta distribuciones RTMP      No soporta RTMP
-Para clientes sin soporte        Para navegadores estándar
-de cookies
-```
-
-> El escenario necesita **múltiples archivos + sin cambiar URLs** → **Signed Cookies** ✅
-
----
-
-### ¿Cómo funcionan los Signed Cookies?
-
-```
-1. Usuario paga suscripción
-         ↓
-2. Aplicación verifica membresía
-         ↓
-3. App envía Set-Cookie headers al navegador
-         ↓
-4. Navegador incluye cookie en cada request a CloudFront
-         ↓
-5. CloudFront valida la cookie → permite acceso a contenido privado
-         ↓
-6. Las URLs del contenido NO cambian ✅
-```
-
----
-
-### Por qué las otras opciones fallan
-
-| Opción | Por qué es incorrecta |
-|---|---|
-| **Match Viewer** | Es una *Origin Protocol Policy* que decide si CloudFront usa HTTP o HTTPS para hablar con el origen. No controla acceso de usuarios |
-| **Signed URL** | Acceso a archivos individuales + **cambia las URLs** → viola el segundo requisito |
-| **Field-Level Encryption** | Protege datos sensibles que los **usuarios suben** al servidor (upload). No controla acceso a descargas de contenido privado |
-
----
-
-### Regla mental para el examen
-
-| Situación | Solución |
-|---|---|
-| Acceso a **un archivo** específico | Signed URL |
-| Acceso a **múltiples archivos** / área de suscriptores | Signed Cookies |
-| **Sin cambiar URLs** actuales | Signed Cookies |
-| Cliente **sin soporte de cookies** | Signed URL |
-| Distribución **RTMP** | Signed URL (Signed Cookies no lo soporta) |
-   
-&nbsp;   
-
-&nbsp;   
-
-&nbsp;
-
-## Egress-Only Internet Gateway + AWS Network Firewall: Seguridad IPv6
-
-### Los tres requisitos del escenario
-
-1. **Solo tráfico saliente** IPv6 hacia internet
-2. **Bloquear conexiones entrantes** iniciadas desde internet
-3. **Inspección y filtrado** de tráfico
-
----
-
-### ¿Por qué Egress-Only Internet Gateway?
-
-IPv6 tiene una característica importante que lo diferencia de IPv4:
-
-```
-IPv4                             IPv6
-────                             ────
-IPs privadas por defecto         IPs públicas por defecto
-NAT Gateway para salir           Egress-Only IGW para salir
-  a internet de forma segura       a internet de forma segura
-```
-
-Como las IPs IPv6 son públicas por defecto, necesitas un componente que permita **salir pero no entrar**:
-
-```
-Egress-Only Internet Gateway
-├── ✅ Permite tráfico IPv6 SALIENTE (instancia → internet)
-├── ✅ BLOQUEA conexiones IPv6 ENTRANTES (internet → instancia)
-├── ✅ Altamente disponible y escalable
-└── ✅ Exclusivo para IPv6
-```
-
----
-
-### La solución completa
-
-```
-Internet
-   ↕ (solo salida)
-Egress-Only IGW
-   ↕
-AWS Network Firewall  ← inspección + filtrado
-   ↕
-Private Subnet
-   └── EC2 Instance
-```
-
----
-
-### Por qué las otras opciones fallan
-
-| Opción | Componente de red | Problema | Componente de seguridad | Problema |
-|---|---|---|---|---|
-| Public subnet + **Internet Gateway** | IGW permite tráfico bidireccional | ❌ No bloquea inbound IPv6 | **Traffic Mirroring** | ❌ Solo copia tráfico para análisis, no filtra |
-| Private subnet + **PrivateLink** | Conecta a servicios AWS, no a internet | ❌ No maneja IPv6 público | **GuardDuty** | ❌ Detecta amenazas, no inspecciona/filtra tráfico |
-| Private subnet + **NAT Gateway** | NAT64 traduce IPv6→IPv4 | ❌ No bloquea inbound IPv6 | **Firewall Manager** | ❌ Gestiona políticas de firewall, no inspecciona tráfico |
-
----
-
-### Distinción entre servicios de seguridad de red
-
-```
-AWS Network Firewall    → Inspección + filtrado activo de tráfico ✅
-AWS Firewall Manager    → Gestión centralizada de políticas (no inspecciona)
-Amazon GuardDuty        → Detección de amenazas con ML (no filtra tráfico)
-Traffic Mirroring       → Copia tráfico para análisis externo (no filtra)
-```
-
----
-
-### Regla mental para el examen
-
-> - **Solo salida IPv6** (bloquear inbound) → **Egress-Only Internet Gateway**
-> - **Solo salida IPv4** (instancias privadas) → **NAT Gateway**
-> - **Entrada y salida** → **Internet Gateway** (público)
-> - **Inspección + filtrado de tráfico en VPC** → **AWS Network Firewall**
-   
-&nbsp;   
-
-&nbsp;   
-
-&nbsp;
-
-## S3 Lifecycle Policies: Almacenamiento Cost-Effective para Archivos Antiguos
-
-### Los requisitos del escenario
-
-- Archivos **mayores de 2 años** → mover a storage más barato
-- Solución **escalable, durable y de alta disponibilidad**
-- **Costo-efectiva**
-
----
-
-### Las dos respuestas correctas: S3 con Lifecycle Policies
-
-S3 permite transicionar objetos automáticamente entre clases de almacenamiento:
-
-```
-S3 Standard (0-2 años)
-         ↓  [Lifecycle Rule: después de 730 días]
-         ├──→ S3 Standard-IA   (acceso infrecuente, aún rápido)
-         └──→ S3 Glacier       (archivado, acceso en 1-5 min con Expedited)
-```
-
-Ambas opciones cumplen los requisitos porque S3 no tiene límite máximo en días para lifecycle rules.
-
----
-
-### Por qué las otras opciones fallan
-
-**❌ Amazon EFS + lifecycle policy hacia EFS-IA**
-```
-EFS Lifecycle máximo: 365 días (1 año)
-Requisito:           730 días (2 años)
-→ Técnicamente imposible de cumplir con EFS
-```
-
-**❌ Amazon EBS + Data Lifecycle Manager (DLM)**
-```
-EBS problemas:
-├── Más costoso que S3
-├── No es escalable para múltiples EC2 (limitaciones de acceso simultáneo)
-├── Multi-attach solo en Provisioned IOPS → muy caro
-└── DLM gestiona snapshots, no transiciones de storage class
-```
-
-**❌ RAID 0 con múltiples EBS + DLM**
-```
-RAID 0  → Mejora rendimiento I/O (striping)
-RAID 1  → Redundancia (mirroring)
-Ninguno → Soluciona el problema de costo/escalabilidad
-Además: mismos problemas de costo que EBS estándar
-```
-
----
-
-### Comparación de clases S3 para este caso
-
-| Clase | Acceso | Costo almacenamiento | Ideal para |
-|---|---|---|---|
-| S3 Standard | Inmediato | Alto | Archivos activos (0-2 años) |
-| S3 Standard-IA | Inmediato | Medio | Acceso infrecuente pero rápido |
-| S3 Glacier | 1-5 min (Expedited) | Bajo | Archivado largo plazo ✅ |
-| S3 Glacier Deep Archive | Horas | Mínimo | Archivado raramente accedido |
-
----
-
-### Regla mental para el examen
-
-> - Mover objetos automáticamente según antigüedad → **S3 Lifecycle Policy**
-> - EFS lifecycle: máximo **365 días** → no sirve para períodos mayores a 1 año
-> - EBS → costoso, no escalable para múltiples instancias simultáneas
-> - **S3 siempre gana** en escalabilidad, durabilidad y costo para almacenamiento de archivos
-   
-&nbsp;   
-
-&nbsp;   
-
-&nbsp;
-
-## S3 Transfer Acceleration + Multipart Upload: Transferencia Global Rápida
-
-### El contexto del escenario
-
-```
-Múltiples países          →          N. Virginia (us-east-1)
-(500 GB por sitio)                   Weather App + S3 Bucket
-     ↑
-Conexión de alta velocidad disponible
-→ El problema no es el ancho de banda local,
-  sino la LATENCIA de larga distancia en internet
-```
-
----
-
-### La solución: Transfer Acceleration + Multipart Upload
-
-Estas dos tecnologías se complementan perfectamente:
-
-**Transfer Acceleration** resuelve el problema de distancia:
-```
-Sin Transfer Acceleration:
-Usuario → Internet público (lento, ruta impredecible) → S3 N.Virginia
-
-Con Transfer Acceleration:
-Usuario → Edge Location CloudFront más cercana → Red privada AWS (rápida) → S3 N.Virginia
-         (corto tramo internet)                  (backbone optimizado)
-```
-Mejora de velocidad: **50-500%** en transferencias de larga distancia.
-
-**Multipart Upload** resuelve el problema del tamaño:
-```
-Archivo 500 GB dividido en partes
-├── Parte 1 ──┐
-├── Parte 2 ──┼──→ S3 (en paralelo) → ensamblado automático
-├── Parte 3 ──┘
-└── ...
-Ventajas: transferencia paralela + recuperación ante fallos por parte
-```
-
----
-
-### Por qué las otras opciones son más lentas
-
-| Opción | Tiempo aproximado | Por qué no es la más rápida |
-|---|---|---|
-| **Snowball Edge** | ~1 semana end-to-end | Es físico: envío, carga, ingestión en AWS |
-| **S3 Cross-Region Replication** | ~15 minutos de replicación | Doble transferencia: subir + replicar. No es inmediato |
-| **Site-to-Site VPN** | Variable, pero lento | Diseñado para conectar redes on-premises a VPC, no para transferencia masiva de datos |
-
----
-
-### Regla mental para el examen
-
-> - Transferencia **rápida** de datos a S3 desde **múltiples ubicaciones globales** → **Transfer Acceleration + Multipart Upload**
-> - Transferencia de **datos masivos** (petabytes) sin internet disponible → **Snowball / Snowball Edge**
-> - **Replicación automática** entre regiones S3 → **Cross-Region Replication** (no es la más rápida)
-> - **Conectar red on-premises a VPC** → **Site-to-Site VPN / Direct Connect**
-   
-&nbsp;   
-
-&nbsp;   
-
-&nbsp;
 
 ## Aurora Global Database: Disaster Recovery Multi-Región
 
@@ -1325,205 +293,6 @@ Inicio del fallo            Sistema restaurado
 
 &nbsp;
 
-## Cifrado de Secrets en EKS: etcd Key-Value Store
-
-### El problema central
-
-En Amazon EKS, los secrets de Kubernetes (contraseñas, API keys, etc.) se almacenan en **etcd**, un almacén distribuido clave-valor. Por defecto, **estos secrets NO están cifrados**, lo que representa un riesgo de seguridad.
-
----
-
-### La solución: Secret Encryption con KMS en EKS
-
-```
-Sin cifrado (default):
-Kubernetes Secret → etcd → texto plano ❌
-
-Con KMS encryption habilitado:
-Kubernetes Secret → KMS cifra → etcd → datos cifrados en reposo ✅
-```
-
-El proceso:
-1. Crear una **KMS key** específica para el cluster EKS
-2. Configurar el cluster para **cifrar secrets antes de guardarlos** en etcd
-3. Todo el contenido sensible en etcd queda cifrado en reposo
-
----
-
-### Por qué las otras opciones no resuelven el problema
-
-| Opción | Qué hace realmente | Por qué no aplica |
-|---|---|---|
-| **AWS Secrets Manager + KMS** | Gestiona y recupera secrets externamente | No cifra datos **dentro de etcd**. Es para acceder a secrets, no para proteger el almacén interno de Kubernetes |
-| **EBS Volume Encryption** | Cifra los volúmenes de los worker nodes | Los worker nodes ≠ etcd. EBS no almacena la configuración interna del cluster |
-| **EBS CSI Driver** | Proporciona storage persistente para pods | Almacenamiento para aplicaciones, no para el etcd del control plane |
-
----
-
-### La distinción clave: etcd vs otras capas de storage
-
-```
-EKS Cluster
-├── Control Plane
-│   └── etcd ← aquí viven los Kubernetes Secrets
-│              ← ESTO necesita KMS encryption
-│
-└── Worker Nodes
-    └── EBS Volumes ← storage de aplicaciones/pods
-                      (EBS encryption es diferente)
-```
-
----
-
-### Secrets Manager vs KMS encryption en EKS
-
-```
-AWS Secrets Manager          KMS Secret Encryption en EKS
-───────────────────          ────────────────────────────
-Almacén externo de secrets   Cifra el almacén interno (etcd)
-Apps recuperan secrets vía   Transparente para las apps
-API de Secrets Manager       
-Rotación automática          Control criptográfico directo
-Útil para secrets de apps    Necesario para compliance de etcd
-```
-
----
-
-### Regla mental para el examen
-
-> - Cifrar **secrets dentro de etcd en EKS** → **KMS secret encryption en el cluster EKS**
-> - Gestionar secrets que las **apps consumen** → **AWS Secrets Manager**
-> - Cifrar **discos de worker nodes** → **EBS encryption**
-> - Storage **persistente para pods** → **EBS CSI Driver**
-   
-&nbsp;   
-
-&nbsp;   
-
-&nbsp;
-
-## AWS Lake Formation: Data Lake Centralizado Multi-Cuenta
-
-### ¿Qué es AWS Lake Formation?
-
-Es un servicio que simplifica la creación de un **data lake seguro** en días, no meses. Actúa como capa de gobierno sobre Amazon S3.
-
-```
-Múltiples cuentas AWS
-├── Cuenta A (datos ventas)
-├── Cuenta B (datos clientes)     →    Lake Formation    →   Data Lake
-└── Cuenta C (datos operaciones)       (cuenta central)      en S3
-```
-
----
-
-### Componentes clave de Lake Formation
-
-```
-Amazon S3          → Capa de almacenamiento del data lake
-AWS Glue           → Data Catalog (describe datasets disponibles)
-Lake Formation     → Gobierno, seguridad y control de acceso
-IAM / AD           → Gestión de identidades y permisos
-```
-
-**Control de acceso granular:**
-- Permisos sobre **tablas y columnas** (no sobre buckets/objetos como S3 nativo)
-- Grant/revoke simple a usuarios IAM, roles, grupos, Active Directory
-- Cross-account sharing **incluido y gratuito**
-
----
-
-### Por qué las otras opciones fallan
-
-| Opción | Problema |
-|---|---|
-| **Amazon Data Firehose** | Configurar Firehose en cada cuenta es costoso e impráctico. Lake Formation ofrece cross-account sharing gratis |
-| **Lambda + EventBridge** | Técnicamente posible con SDK, pero muy difícil de gestionar. Viola el requisito de "minimizar overhead operacional" |
-| **AWS Control Tower** | Gobierna y gestiona **múltiples cuentas AWS** en general, no está diseñado específicamente para consolidar datos en S3 |
-
----
-
-### Regla mental para el examen
-
-> - **Consolidar datos de múltiples cuentas** con mínimo overhead → **AWS Lake Formation**
-> - **Catalogar y describir datasets** → **AWS Glue Data Catalog** (integrado en Lake Formation)
-> - **Streaming de datos hacia S3/Redshift** → **Amazon Data Firehose**
-> - **Gobernar múltiples cuentas AWS** (no solo datos) → **AWS Control Tower**
-   
-&nbsp;   
-
-&nbsp;   
-
-&nbsp;
-
-## Migración Oracle a AWS: DMS + RDS Multi-AZ
-
-### Los dos requisitos del escenario
-
-1. **Migrar** la base de datos Oracle on-premises a AWS
-2. **Alta disponibilidad** ante fallos de servidor de base de datos
-
----
-
-### Las dos respuestas correctas
-
-**1. AWS Database Migration Service (DMS) → para la migración**
-```
-On-premises Oracle  →  AWS DMS  →  RDS Oracle
-                       ↑
-               - Mínimo downtime
-               - Zero data loss
-               - Soporta +20 motores
-               - Oracle → RDS Oracle (migración homogénea)
-```
-
-**2. RDS Oracle con Multi-AZ → para alta disponibilidad**
-```
-AZ-A: RDS Oracle (primario)  ←→  AZ-B: RDS Oracle (standby)
-         ↓ sincronización síncrona
-Si primario falla → failover automático al standby
-Mismo endpoint → aplicación no necesita cambios
-```
-
----
-
-### Por qué las otras opciones fallan
-
-| Opción | Por qué es incorrecta |
-|---|---|
-| **RDS Oracle con RMAN** | Oracle Recovery Manager **no está soportado** en RDS. AWS gestiona los backups por ti |
-| **AWS Schema Conversion Tool** | SCT es para migraciones **heterogéneas** (Oracle → PostgreSQL). Este caso es Oracle → Oracle (homogénea), no necesita conversión de esquema |
-| **Aurora single instance** | Sin Multi-AZ = sin alta disponibilidad. No apto para cargas críticas de producción |
-
----
-
-### Migración homogénea vs heterogénea
-
-```
-Homogénea (mismo motor)          Heterogénea (diferente motor)
-────────────────────             ─────────────────────────────
-Oracle → Oracle ✅ aquí          Oracle → PostgreSQL
-MySQL → MySQL                    SQL Server → Aurora
-Solo necesita DMS                Necesita SCT + DMS
-```
-
-> **Regla:** Si el motor de origen y destino son **iguales** → solo DMS. Si son **diferentes** → SCT primero para convertir el esquema, luego DMS para migrar los datos.
-
----
-
-### Regla mental para el examen
-
-> - **Migrar base de datos** a AWS con mínimo downtime → **AWS DMS**
-> - **Cambiar de motor** de base de datos → **AWS SCT + DMS**
-> - **Alta disponibilidad** en RDS ante fallos → **Multi-AZ**
-> - **Escalar lecturas** en RDS → **Read Replicas**
-> - Oracle RMAN en RDS → **no soportado**
-   
-&nbsp;   
-
-&nbsp;   
-
-&nbsp;
 
 ## NAT Gateway Multi-AZ: Eliminando el Single Point of Failure
 
@@ -1596,468 +365,6 @@ Route table → debe configurarse en subnet PRIVADA
 
 &nbsp;
 
-## EBS + S3 + S3 Glacier: Solución de Almacenamiento en Tres Capas
-
-### Los tres requisitos del escenario
-
-```
-1. Block storage persistente    → misión crítica
-2. Object storage para backups  → primeros 30 días
-3. Archival storage             → después de 30 días, largo plazo
-```
-
----
-
-### La solución correcta capa por capa
-
-```
-EC2 Instance
-└── EBS Volume          ← bloque persistente para workloads críticos
-         ↓ backup
-    S3 Standard         ← object storage (días 0-30)
-         ↓ lifecycle policy (día 30)
-    S3 Glacier Flexible Retrieval  ← archivado largo plazo
-```
-
----
-
-### Las dos decisiones clave que determinan la respuesta
-
-**1. EBS vs Instance Store**
-
-| | EBS | Instance Store |
-|---|---|---|
-| Persistencia | ✅ Persiste independiente del EC2 | ❌ Temporal, se pierde al detener/terminar |
-| Misión crítica | ✅ Ideal | ❌ No apto |
-| Adjuntar después del lanzamiento | ✅ Sí | ❌ Solo al lanzar la instancia |
-| Snapshots | ✅ Sí | ❌ No |
-
-**2. S3 Glacier Flexible Retrieval vs S3 One Zone-IA**
-
-| | S3 Glacier Flexible Retrieval | S3 One Zone-IA |
-|---|---|---|
-| Propósito | **Archivado** largo plazo | Acceso infrecuente (no archivado) |
-| Costo | Muy bajo | Medio |
-| Disponibilidad | Multi-AZ | **Una sola AZ** |
-| Recuperación | Minutos a horas | Inmediata |
-
----
-
-### El distractor del EBS Snapshot
-
-> El enunciado menciona una "EBS snapshot retention rule" intencionalmente para confundir. Los EBS snapshots se almacenan internamente en S3, pero son gestionados por separado y **no pueden transicionarse** con lifecycle policies de S3 hacia Glacier.
-
----
-
-### Regla mental para el examen
-
-> - **Block storage persistente** para workloads críticos → **EBS**
-> - **Block storage temporal** (alta I/O, efímero) → **Instance Store**
-> - **Archivado** a largo plazo en S3 → **S3 Glacier Flexible Retrieval**
-> - **Acceso infrecuente** pero no archivado → **S3 Standard-IA**
-> - **One Zone-IA** → más barato pero sin redundancia multi-AZ, no apto para archivado crítico
-   
-&nbsp;   
-
-&nbsp;   
-
-&nbsp;
-
-## API Gateway: Canary Release vs Otras Estrategias de Deployment
-
-### Los requisitos del escenario
-
-- **Mínima disrupción** para los clientes
-- **Mínima pérdida de datos** durante la actualización
-- Solución **costo-efectiva**
-
----
-
-### ¿Qué es Canary Release?
-
-Estrategia que libera la nueva versión a un **subconjunto pequeño** de usuarios primero:
-
-```
-Todo el tráfico (100%)
-         ↓
-   API Gateway
-   ├── Producción (90%) → versión actual estable
-   └── Canary Stage (10%) → nueva versión
-              ↓
-   Monitorear → si todo bien → aumentar % gradualmente
-              → si hay problemas → rollback sin afectar al resto
-              ↓
-   Eventualmente: Canary promovido a Producción (100%)
-```
-
----
-
-### Comparación de las cuatro estrategias
-
-| Estrategia | Aislamiento | Costo | Riesgo | Veredicto |
-|---|---|---|---|---|
-| **Canary Release** | Alto (% controlado) | Bajo (mismo GW) | Bajo | ✅ |
-| **Blue-Green** | Alto (dos entornos) | **Alto** (doble infraestructura) | Bajo | ❌ Costoso |
-| **Import-to-update (overwrite/merge)** | Ninguno | Bajo | **Alto** (afecta todo simultáneamente) | ❌ Riesgoso |
-| **Nuevo API Gateway + mismo dominio** | Ninguno | Medio | **Alto** (DNS propagation delays + downtime) | ❌ Downtime |
-
----
-
-### Canary vs Blue-Green: la distinción clave
-
-```
-Blue-Green                       Canary Release
-──────────                       ──────────────
-Dos entornos completos           Un entorno con % de tráfico dividido
-Blue (actual) + Green (nuevo)    Producción + Canary stage
-Switch total cuando validado     Incremento gradual del %
-Mayor costo (doble infra)        Menor costo (mismo API Gateway)
-Rollback: cambiar el switch      Rollback: reducir % a 0
-```
-
-> El escenario pide **costo-efectivo** → Blue-Green queda eliminado por su doble infraestructura.
-
----
-
-### Regla mental para el examen
-
-> - **Mínima disrupción + costo-efectivo** en API Gateway → **Canary Release**
-> - **Dos entornos paralelos completos** → **Blue-Green** (más costoso pero más aislado)
-> - Cuando el requisito menciona **"cost-effective"** y hay una opción Blue-Green → generalmente **no es la respuesta correcta**
-   
-&nbsp;   
-
-&nbsp;   
-
-&nbsp;
-
-## Kinesis + Lambda + DynamoDB: Anonimización de PII en Tiempo Real
-
-### El requisito crítico del escenario
-
-> PII debe ser anonimizada **ANTES** de llegar a cualquier sistema de almacenamiento.
-
-Esta condición elimina inmediatamente cualquier solución que almacene datos primero y anonimice después.
-
----
-
-### La solución correcta: anonimización en tránsito
-
-```
-Fuentes múltiples
-      ↓
-Kinesis Data Stream    ← ingesta en tiempo real, escalable
-      ↓
-AWS Lambda             ← anonimiza PII EN TRÁNSITO (nunca toca storage)
-      ↓
-Amazon DynamoDB        ← solo recibe datos ya anonimizados ✅
-      (NoSQL)
-```
-
----
-
-### Por qué las otras opciones violan el requisito principal
-
-| Opción | El problema |
-|---|---|
-| **S3 → Lambda → DynamoDB** | PII se almacena en S3 **primero**, luego se anonimiza. Viola el requisito |
-| **DynamoDB → DynamoDB Streams → Lambda** | PII se escribe en DynamoDB **primero**, luego Lambda anonimiza. Viola el requisito. Además, `AmazonDynamoDBFullAccess` viola el principio de **mínimo privilegio** |
-| **Firehose → Redshift** | Redshift es un **data warehouse relacional**, no una base de datos NoSQL |
-
----
-
-### La regla de oro: ¿cuándo ocurre la anonimización?
-
-```
-❌ Almacenar → Anonimizar    (S3 o DynamoDB primero)
-              PII toca el storage aunque sea brevemente
-
-✅ Anonimizar → Almacenar    (Lambda en tránsito)
-              PII nunca llega al storage
-```
-
----
-
-### Comparación de servicios de streaming
-
-| Servicio | Caso de uso | Procesa con Lambda |
-|---|---|---|
-| **Kinesis Data Streams** | Streaming en tiempo real, procesamiento personalizado | ✅ Sí |
-| **Amazon Data Firehose** | Entrega directa a destinos (S3, Redshift, etc.) | ✅ Sí (transformación limitada) |
-| **DynamoDB Streams** | Reaccionar a cambios en una tabla DynamoDB | ✅ Sí, pero datos ya en DB |
-
----
-
-### Regla mental para el examen
-
-> - **Streaming en tiempo real + transformación antes de almacenar** → **Kinesis Data Streams + Lambda**
-> - **PII que no debe tocar ningún storage** → la transformación debe ocurrir **en tránsito**
-> - **NoSQL en AWS** → **DynamoDB**
-> - **Data warehouse relacional** → **Redshift** (no es NoSQL)
-> - Permisos excesivos como `FullAccess` → siempre violación del **principio de mínimo privilegio**
-
-&nbsp;   
-
-&nbsp;   
-
-&nbsp;
-
-## AWS Shield Advanced: Protección contra DDoS
-
-### Los niveles de protección DDoS en AWS
-
-```
-AWS Shield Standard (gratuito, automático)
-├── Protección básica contra ataques comunes
-├── Capa de red y transporte (L3/L4)
-└── Incluido automáticamente para todos los clientes
-
-AWS Shield Advanced (de pago, suscripción)
-├── Todo lo de Standard +
-├── Detección y mitigación de ataques sofisticados y grandes
-├── Visibilidad en tiempo real de los ataques
-├── Integración con AWS WAF
-├── Acceso 24/7 al DDoS Response Team (DRT)
-└── Protección contra cargos extra por spikes de DDoS en EC2/ELB/CloudFront/Route 53
-```
-
----
-
-### Por qué las otras opciones son insuficientes
-
-| Opción | Propósito real | ¿Protege contra DDoS? |
-|---|---|---|
-| **AWS Firewall Manager** | Administración centralizada de WAF en múltiples cuentas | ❌ No mitiga DDoS directamente |
-| **AWS WAF** | Filtra tráfico HTTP (SQL injection, XSS, patrones maliciosos) | ⚠️ Parcial, no suficiente para DDoS volumétrico |
-| **Security Groups + NACLs** | Control de acceso a nivel de instancia/subnet | ⚠️ Útil pero insuficiente ante ataques masivos |
-| **AWS Shield Advanced** | Detección y mitigación específica de DDoS | ✅ Solución diseñada exactamente para esto |
-
----
-
-### Los servicios protegidos por Shield Advanced
-
-```
-AWS Shield Advanced protege:
-├── Amazon EC2
-├── Elastic Load Balancing (ELB)
-├── Amazon CloudFront
-└── Amazon Route 53
-```
-
----
-
-### Regla mental para el examen
-
-> - **DDoS** → **AWS Shield** (Standard gratuito, Advanced para ataques sofisticados)
-> - **SQL injection, XSS, tráfico HTTP malicioso** → **AWS WAF**
-> - **Gestión centralizada de WAF en múltiples cuentas** → **AWS Firewall Manager**
-> - **Inspección y filtrado de tráfico en VPC** → **AWS Network Firewall**
-> - **Control de acceso a instancias/subnets** → **Security Groups + NACLs**
-   
-&nbsp;   
-
-&nbsp;   
-
-&nbsp;
-
-## Auto Scaling: Target Tracking vs Otras Políticas de Escalado
-
-### El problema del escenario
-
-**Over-provisioning** = demasiados recursos activos → costos innecesariamente altos. Se necesita una política que ajuste la capacidad **dinámicamente y con precisión**.
-
----
-
-### Comparación de todas las políticas de Auto Scaling
-
-| Política | Cómo funciona | Ideal para | Problema |
-|---|---|---|---|
-| **Target Tracking** | Mantiene una métrica en un valor objetivo automáticamente | Optimización continua de costos ✅ | — |
-| **Simple Scaling** | Escala cuando una alarma CloudWatch se dispara | Casos básicos | Debe esperar el **cooldown period** antes de escalar de nuevo |
-| **Step Scaling** | Escala en pasos según el tamaño del breach de la alarma | Respuesta granular a cambios | Más complejo de configurar |
-| **Scheduled Scaling** | Escala en horarios predefinidos | Tráfico **predecible** (ej: más usuarios de 9am-5pm) | No sirve para tráfico variable |
-| **Suspend/Resume** | Pausa temporalmente todas las actividades de scaling | Mantenimiento temporal | No es una política de escalado dinámico |
-
----
-
-### ¿Por qué Target Tracking es la mejor opción?
-
-```
-Ejemplo: Target = 50% CPU
-
-CPU sube a 80% → ASG agrega instancias automáticamente
-CPU baja a 30% → ASG remueve instancias automáticamente
-                  ↑
-         Sin esperar cooldown period
-         Sin configurar alarmas manualmente
-         Se ajusta a patrones cambiantes de carga
-```
-
-Ventajas clave:
-- ✅ **No necesitas crear alarmas CloudWatch** manualmente
-- ✅ **No hay cooldown period** que bloquee nuevas acciones
-- ✅ Ajuste continuo → evita over-provisioning y under-provisioning
-- ✅ Responde a cambios en patrones de carga dinámicamente
-
----
-
-### Regla mental para el examen
-
-> - **Optimizar costos + evitar over-provisioning** → **Target Tracking Scaling**
-> - **Tráfico predecible** (horarios fijos) → **Scheduled Scaling**
-> - **Respuesta escalonada** según magnitud del problema → **Step Scaling**
-> - **Pausar scaling temporalmente** → **Suspend and Resume**
-> - Simple Scaling → obsoleto en la práctica, tiene limitación del cooldown period
-   
-&nbsp;   
-
-&nbsp;   
-
-&nbsp;
-   
-## Migración .NET + Oracle a AWS: Mínimos Cambios, Alta Disponibilidad
-
-### Los requisitos del escenario
-
-- **Minimizar cambios** de desarrollo (no refactorizar)
-- **Alta disponibilidad** en la nube
-- **Más fácil de gestionar** que on-premises
-
----
-
-### Las dos respuestas correctas
-
-**1. Elastic Beanstalk Multi-AZ → para la aplicación .NET**
-```
-On-premises .NET (Windows Server + IIS)
-         ↓ rehost (lift & shift)
-Elastic Beanstalk Multi-AZ
-├── Soporta .NET nativamente ✅
-├── Gestiona automáticamente: EC2, Load Balancing, Scaling, Health monitoring
-├── Sin cambios de código ✅
-└── Multi-AZ = alta disponibilidad ✅
-```
-
-**2. RDS for Oracle Multi-AZ + DMS → para la base de datos**
-```
-On-premises Oracle Standard Edition
-         ↓ migración homogénea (Oracle → Oracle)
-RDS for Oracle Multi-AZ
-├── Mismo motor = sin conversión de schema ✅
-├── AWS DMS maneja la migración con mínimo downtime ✅
-└── Multi-AZ = failover automático ✅
-```
-
----
-
-### Por qué las otras opciones violan los requisitos
-
-| Opción | Tipo de migración | Problema |
-|---|---|---|
-| **Refactorizar a .NET Core + EKS/Fargate** | Refactor | Cambios significativos de código ❌ |
-| **ECS + EC2 worker nodes + ECS Anywhere** | Replatform | Debes gestionar los EC2 subyacentes + cambios de plataforma ❌ |
-| **AWS MGN para Oracle → EC2** | Rehost de DB en EC2 | MGN no es la herramienta adecuada para Oracle; además EC2 requiere más gestión que RDS ❌ |
-
----
-
-### Los 6 tipos de migración ("6 Rs") aplicados aquí
-
-```
-Retire     → eliminar
-Retain     → mantener on-premises
-Rehost     → lift & shift sin cambios      ← Elastic Beanstalk aquí ✅
-Replatform → lift & reshape (mínimos cambios de plataforma)
-Repurchase → cambiar a SaaS
-Refactor   → rediseñar la arquitectura     ← EKS/Fargate aquí ❌ (demasiados cambios)
-```
-
----
-
-### Regla mental para el examen
-
-> - **"Minimizar cambios" + aplicación .NET** → **Elastic Beanstalk** (gestión automática, soporta .NET/IIS)
-> - **Migración Oracle → Oracle** (homogénea) → **AWS DMS** (sin Schema Conversion Tool)
-> - **Migración Oracle → otro motor** (heterogénea) → **AWS SCT + DMS**
-> - **Rehost de servidores completos** (cualquier OS) → **AWS Application Migration Service (MGN)**
-> - **Refactorizar = cambios de código** → contradice "minimizar cambios de desarrollo"
-
-&nbsp;   
-
-&nbsp;   
-
-&nbsp;
-
-## S3 Pre-Signed URLs: Control de Acceso a Contenido Privado
-
-### El problema
-
-Las fotos en S3 son **públicamente accesibles**, permitiendo que otros sitios las enlacen directamente (*hotlinking*). Esto consume el ancho de banda del propietario sin beneficio económico.
-
----
-
-### La solución: Pre-Signed URLs con expiración
-
-```
-Antes (problemático):
-Bucket S3 público → cualquiera enlaza las fotos directamente ❌
-
-Después (solución):
-Bucket S3 privado → nadie accede directamente
-      ↓
-Aplicación genera Pre-Signed URL con expiración
-      ↓
-URL válida solo por tiempo limitado (ej: 1 hora)
-      ↓
-Solo el usuario autorizado puede acceder ✅
-```
-
-**Cómo funciona una Pre-Signed URL:**
-```
-Requiere al generarla:
-├── Credenciales de seguridad del propietario
-├── Nombre del bucket
-├── Object key
-├── Método HTTP (GET para descarga)
-└── Fecha/hora de expiración
-```
-
----
-
-### Por qué las otras opciones no son efectivas
-
-| Opción | Por qué falla |
-|---|---|
-| **Bloquear IPs con NACL** | Los sitios ofensores pueden cambiar su IP fácilmente, eludiendo el bloqueo |
-| **CloudFront** | Es una CDN que acelera la entrega de contenido, no restringe quién puede acceder |
-| **Amazon WorkDocs** | Herramienta de colaboración de documentos, no diseñada para servir contenido estático web |
-
----
-
-### Pre-Signed URLs vs Signed Cookies (recordando tema anterior)
-
-```
-Pre-Signed URLs (S3)             Signed Cookies (CloudFront)
-────────────────────             ───────────────────────────
-Control de acceso en S3          Control de acceso en CloudFront
-Por objeto individual            Múltiples archivos a la vez
-Sin cambiar URLs base            Sin cambiar URLs actuales
-Tiempo de expiración configurable Tiempo de expiración configurable
-```
-
----
-
-### Regla mental para el examen
-
-> - **Hotlinking / uso no autorizado** de objetos S3 → **quitar acceso público + Pre-Signed URLs**
-> - **Pre-Signed URL** → acceso temporal y controlado a objetos S3 privados
-> - **Bloquear IPs** → ineficiente, fácilmente eludible
-> - **CloudFront** → velocidad de entrega, no control de acceso por sí solo
-   
-&nbsp;   
-
-&nbsp;   
-
-&nbsp;
 
 ## Lambda@Edge + Origin Failover: Performance y Resiliencia en CloudFront
 
@@ -2130,73 +437,106 @@ Grupo de orígenes:
 
 &nbsp;
 
-## Análisis de IAM Policy: Lectura de Permisos JSON
 
-### Desglose de la política
+## RDS Multi-AZ: Replicación Síncrona para Alta Disponibilidad
 
-```json
-Statement 1:
-{
-  "Effect": "Allow",
-  "Action": ["s3:Get*", "s3:List*"],
-  "Resource": "*"          ← TODOS los buckets
-}
+Esta pregunta evalúa una distinción fundamental que ya hemos visto en conversaciones anteriores, pero aquí va el resumen preciso:
 
-Statement 2:
-{
-  "Effect": "Allow",
-  "Action": "s3:PutObject",
-  "Resource": "arn:aws:s3:::boracay/*"  ← SOLO bucket boracay
-}
+### La distinción clave: Síncrono vs Asíncrono
+
 ```
-
----
-
-### Mapa completo de permisos
-
-| Acción | ¿En qué recursos? | ¿Permitido? |
-|---|---|---|
-| `s3:Get*` (leer objetos) | **Todos** los buckets | ✅ |
-| `s3:List*` (listar objetos) | **Todos** los buckets | ✅ |
-| `s3:PutObject` (escribir) | Solo bucket **boracay** | ✅ |
-| `s3:DeleteObject` (eliminar) | Ninguno | ❌ No está en la policy |
-| `s3:PutBucketAcl` (cambiar permisos) | Ninguno | ❌ No está en la policy |
-
----
-
-### Las tres respuestas correctas explicadas
-
-**✅ Leer objetos de TODOS los buckets**
-> `s3:Get*` con `Resource: "*"` → aplica a cualquier bucket de la cuenta
-
-**✅ Escribir objetos en el bucket `boracay`**
-> `s3:PutObject` con `Resource: "arn:aws:s3:::boracay/*"` → solo en boracay
-
-**✅ Leer objetos del bucket `boracay`**
-> Incluido en el primer statement (`s3:Get*` aplica a todos, incluyendo boracay)
+Multi-AZ (Síncrono)              Read Replica (Asíncrono)
+───────────────────              ─────────────────────────
+Escribe en primario              Escribe en primario
+    ↓ simultáneamente                ↓ después
+Escribe en standby               Replica en segundo plano
+→ Ambos siempre en sync ✅       → Puede haber lag ⚠️
+→ Failover automático            → Promoción manual
+→ Alta disponibilidad            → Escalar lecturas
+```
 
 ---
 
 ### Por qué las otras opciones son incorrectas
 
-**❌ "Puede cambiar permisos del bucket boracay"**
-> Cambiar permisos requeriría `s3:PutBucketPolicy` o `s3:PutBucketAcl`. Ninguno está en la policy.
-
-**❌ "Puede leer pero NO listar objetos en boracay"**
-> Falso. `s3:List*` en `Resource: "*"` permite listar **todos** los buckets, incluyendo boracay.
-
-**❌ "Puede leer Y eliminar objetos de boracay"**
-> Puede leer ✅, pero eliminar requeriría `s3:DeleteObject`, que **no aparece** en ningún statement.
+| Opción | Error |
+|---|---|
+| **RDS Read Replica** | Replicación **asíncrona**, no síncrona. Para escalar lecturas, no para HA |
+| **DynamoDB Read Replica** | DynamoDB **no tiene** Read Replicas. Usa Global Tables para replicación multi-región |
+| **CloudFront Multi-AZ** | CloudFront **no tiene** Multi-AZ ni replica datos de base de datos. Es una CDN que cachea contenido en edge locations |
 
 ---
 
 ### Regla mental para el examen
 
-> Al analizar una IAM policy, verifica siempre:
-> 1. ¿Qué **acciones** están permitidas? (`Action`)
-> 2. ¿En qué **recursos** aplican? (`Resource: "*"` vs ARN específico)
-> 3. ¿El efecto es **Allow o Deny**?
-> 4. Si una acción **no aparece** en la policy → está **denegada por defecto**
+> - **Replicación síncrona + failover automático** → **RDS Multi-AZ**
+> - **Replicación asíncrona + escalar lecturas** → **RDS Read Replica**
+> - **Replicación multi-región en DynamoDB** → **Global Tables**
+
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
+
+## SQS FIFO vs Standard: Eliminando Mensajes Duplicados
+
+### El problema raíz
+
+```
+SQS Standard Queue
+├── Entrega "at-least-once" → puede entregar el mismo mensaje MÁS DE UNA VEZ
+├── Sin garantía de orden
+└── Si EC2 falla antes de eliminar el mensaje → mensaje reaparece → procesado dos veces ❌
+```
+
+---
+
+### La solución: SQS FIFO Queue
+
+```
+SQS FIFO Queue
+├── Entrega "exactly-once" → cada mensaje procesado UNA SOLA VEZ ✅
+├── Orden garantizado (First-In-First-Out) ✅
+├── Deduplicación automática de mensajes
+└── Ideal para: pedidos, transacciones financieras, comandos secuenciales
+```
+
+---
+
+### Por qué las otras opciones no resuelven el problema
+
+| Opción | Qué hace realmente | ¿Resuelve duplicados? |
+|---|---|---|
+| **Visibility timeout** | Oculta el mensaje mientras se procesa | ❌ No garantiza contra duplicados en Standard queue |
+| **Retention period** | Define cuánto tiempo existe el mensaje en la cola | ❌ No tiene relación con duplicados |
+| **Message size** | Límite de tamaño del mensaje (256 KB) | ❌ Completamente irrelevante |
+| **FIFO Queue** | Exactly-once + orden garantizado | ✅ Elimina duplicados |
+
+---
+
+### Standard vs FIFO: comparación directa
+
+```
+SQS Standard                     SQS FIFO
+────────────                      ─────────
+At-least-once delivery ❌         Exactly-once delivery ✅
+Sin orden garantizado             Orden garantizado (FIFO)
+Throughput ilimitado              300 msg/s (3,000 con batching)
+Más barato                        Ligeramente más costoso
+Para alta escala sin importar     Para orden y no-duplicación
+duplicados                        críticos
+```
+
+---
+
+### Regla mental para el examen
+
+> - **Mensajes duplicados en SQS** → **FIFO Queue** (exactly-once delivery)
+> - **Orden de procesamiento crítico** → **FIFO Queue**
+> - **Máximo throughput sin importar duplicados** → **Standard Queue**
+> - **Visibility timeout** → evita que otros consumidores vean el mensaje, pero NO elimina duplicados
    
 &nbsp;   
 
@@ -2204,77 +544,1027 @@ Statement 2:
 
 &nbsp;
 
-## Redis AUTH en ElastiCache: Autenticación con Contraseña
 
-### Los requisitos del escenario
+## Route 53 Failover: Active-Active vs Active-Passive
 
-- Autenticación con **contraseña** antes de ejecutar comandos Redis
-- Soporte para comandos específicos como `MULTI EXEC`
-- **Credenciales de larga duración** (long-lived credentials)
-- Seguridad robusta
+### La distinción fundamental
+
+```
+Active-Active Failover           Active-Passive Failover
+─────────────────────            ───────────────────────
+TODOS los recursos activos       Recursos PRIMARIOS activos
+simultáneamente                  Recursos SECUNDARIOS en standby
+                                 
+Route 53 responde con            Route 53 responde solo con
+cualquier recurso saludable      recursos primarios saludables
+                                 Si todos fallan → usa secundarios
+Política: Weighted, Latency,     Política: Failover (routing policy)
+Geolocation, etc.
+```
 
 ---
 
-### La solución: Redis AUTH + Transit Encryption
+### ¿Por qué Active-Active con Weighted policy es correcto?
+
+El escenario requiere que **todos los recursos estén disponibles todo el tiempo**:
 
 ```
-Cliente → --transit-encryption-enabled → Canal cifrado (TLS)
-                                              ↓
-                                    --auth-token (contraseña)
-                                              ↓
-                                    Redis valida contraseña
-                                              ↓
-                                    Acceso permitido a comandos
-                                    (incluyendo MULTI EXEC) ✅
+Región us-east-1 (activa)  ──┐
+Región eu-west-1 (activa)  ──┼──→ Route 53 (Weighted) → distribuye tráfico
+Región ap-northeast-1(activa)┘     entre todos los saludables
+
+Si una región falla → Route 53 detecta el health check fallido
+                   → excluye esa región automáticamente
+                   → tráfico continúa a las regiones saludables ✅
 ```
 
-Los dos parámetros son **complementarios y necesarios juntos**:
+---
 
-| Parámetro | Función |
+### Por qué las otras opciones son incorrectas
+
+| Opción | Por qué falla |
 |---|---|
-| `--transit-encryption-enabled` | Cifra la comunicación cliente-Redis (TLS) |
-| `--auth-token` | Requiere contraseña para ejecutar comandos |
+| **Active-Passive con Weighted Records** | Active-Passive tiene primarios y secundarios. El requisito es que TODOS estén activos siempre |
+| **Active-Passive con múltiples primarios y secundarios** | Mismo problema: hay recursos en standby, no todos activos simultáneamente |
+| **Active-Active con un primario y un secundario** | Concepto inválido: Active-Active no tiene primarios ni secundarios. Todos son iguales |
 
-> ⚠️ Redis AUTH **requiere** que el transit encryption esté habilitado. No puede usarse sin TLS.
+---
+
+### Regla mental para el examen
+
+> - **"Todos los recursos disponibles todo el tiempo"** → **Active-Active Failover**
+> - **"Recurso primario con backup en standby"** → **Active-Passive Failover**
+> - Active-Active usa: Weighted, Latency, Geolocation (cualquier política excepto Failover)
+> - Active-Passive usa: **Failover routing policy** específicamente
+> - En Active-Active **no existen** conceptos de "primario" y "secundario"
+   
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
+
+## CloudFront Origin Groups: Alta Disponibilidad con Failover
+
+### ¿Qué es un Origin Group en CloudFront?
+
+```
+Origin Group
+├── Origen Primario  → recibe tráfico normal
+└── Origen Secundario → CloudFront cambia automáticamente
+                        si el primario falla o devuelve
+                        códigos HTTP de error específicos
+
+Requisito: mínimo DOS orígenes para configurar origin failover
+```
+
+---
+
+### La solución correcta
+
+```
+AZ-A                    AZ-B
+┌──────────┐           ┌──────────┐
+│ EC2 #1   │           │ EC2 #2   │
+│(primario)│           │(secundario)│
+└──────────┘           └──────────┘
+      └───────────────────┘
+              ↑
+        Origin Group
+              ↑
+         CloudFront
+         (distribución global)
+```
+
+Si EC2 #1 (AZ-A) falla → CloudFront automáticamente usa EC2 #2 (AZ-B) ✅
 
 ---
 
 ### Por qué las otras opciones fallan
 
-| Opción | Por qué es incorrecta |
+| Opción | Error específico |
 |---|---|
-| **AtRestEncryptionEnabled** | Cifra datos **en reposo** dentro del almacén en memoria. No protege la autenticación ni el acceso a comandos |
-| **Solo transit encryption** | Cifra el canal pero **no requiere contraseña**. Falta el `--auth-token` |
-| **IAM authentication token** | IAM no soporta comandos Redis como `MULTI EXEC`. Además, los tokens IAM **expiran cada 12 horas** → no son long-lived credentials ❌ |
-
----
-
-### Comparación de cifrado en ElastiCache Redis
-
-```
-At-Rest Encryption          In-Transit Encryption        Redis AUTH
-──────────────────          ─────────────────────        ──────────
-Protege datos en disco      Protege datos en tránsito    Requiere contraseña
-y en memoria                (canal TLS)                  para ejecutar comandos
-AtRestEncryptionEnabled     transit-encryption-enabled   --auth-token
-No requiere autenticación   No requiere autenticación    Long-lived credentials ✅
-```
+| **S3 para contenido dinámico** | S3 solo sirve **contenido estático**. El contenido dinámico requiere EC2 u otro servidor de aplicaciones |
+| **Auto Scaling Group como origen** | No puedes usar un ASG directamente como origen en CloudFront. Además necesitas **al menos 2 orígenes** para origin failover |
+| **Lambda@Edge en origin group** | Lambda@Edge no puede configurarse como parte de un origin group en CloudFront |
 
 ---
 
 ### Regla mental para el examen
 
-> - **Autenticación con contraseña en Redis** → **Redis AUTH** (`--auth-token`)
-> - Redis AUTH **siempre** requiere `--transit-encryption-enabled`
-> - **Cifrado de datos en reposo** en ElastiCache → `AtRestEncryptionEnabled`
-> - **IAM tokens** → expiran en 12h, no sirven para credenciales de larga duración en Redis
-> - `MULTI EXEC` = transacción Redis → requiere Redis AUTH, no IAM
+> - **Alta disponibilidad en CloudFront** → **Origin Group con 2+ orígenes en diferentes AZs**
+> - **Origen primario falla** → CloudFront automáticamente usa el **origen secundario**
+> - **S3 como origen** → solo para contenido estático
+> - **EC2 como origen** → para contenido dinámico
+> - Origin failover requiere **mínimo 2 orígenes** configurados en el grupo
    
 &nbsp;   
 
 &nbsp;   
 
 &nbsp;
+
+
+## Fault Tolerance Multi-AZ: Cálculo del Número Óptimo de Instancias
+
+### La fórmula clave
+
+```
+Requisito: mínimo N instancias funcionando INCLUSO si una AZ falla
+Número de AZs: Z
+
+Instancias por AZ = N / (Z - 1)
+
+→ N=6, Z=3: 6 / (3-1) = 6/2 = 3 instancias por AZ
+```
+
+---
+
+### Verificación de la solución correcta
+
+```
+3 instancias en eu-west-1a
+3 instancias en eu-west-1b
+3 instancias en eu-west-1c
+Total: 9 instancias
+
+Si eu-west-1a falla:
+eu-west-1b (3) + eu-west-1c (3) = 6 instancias ✅ mínimo cumplido
+```
+
+---
+
+### Análisis de todas las opciones
+
+| Distribución | Total | Si una AZ falla | ¿Cumple? | Costo |
+|---|---|---|---|---|
+| 2+2+2 | 6 | 4 instancias | ❌ (necesita 6) | Más barato pero inválido |
+| **3+3+3** | **9** | **6 instancias** | **✅** | **Óptimo** |
+| 6+6+0 | 12 | 6 instancias | ✅ | Más costoso que 3+3+3 |
+| 6+6+6 | 18 | 12 instancias | ✅ | Más costoso, over-provisioned |
+
+---
+
+### Fault Tolerance vs High Availability
+
+```
+High Availability                Fault Tolerance
+─────────────────                ───────────────
+Al menos 1 instancia             Mínimo N instancias
+funcionando                      funcionando siempre
+Sin degradación de servicio      Sin degradación de servicio
+requerida necesariamente         requerida ← más estricto
+```
+
+---
+
+### Regla mental para el examen
+
+> Para fault tolerance con pérdida de **1 AZ** entre **Z AZs**:
+> **Instancias por AZ = Mínimo requerido ÷ (Z - 1)**
+>
+> Ejemplo: 6 instancias mínimas, 3 AZs → 6÷2 = **3 por AZ** (9 total)
+   
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
+
+---
+
+# CSAA – Design High-Performing Architectures
+
+---
+
+
+## Amazon Aurora: Endpoints y Conexiones
+
+### ¿Qué es Aurora y por qué usa endpoints?
+
+Aurora no es una sola instancia de base de datos, sino un **cluster** (grupo) de instancias. Para no obligarte a recordar las IPs/hostnames de cada instancia ni programar tu propia lógica de conexión, Aurora usa **endpoints**: direcciones intermediarias que apuntan automáticamente a la instancia correcta.
+
+---
+
+### Tipos de Endpoints
+
+| Endpoint | También llamado | ¿A dónde apunta? | Uso típico |
+|---|---|---|---|
+| **Cluster endpoint** | Writer endpoint | Instancia primaria (lectura/escritura) | DDL, DML, operaciones de escritura |
+| **Reader endpoint** | — | Reparte carga entre todas las réplicas | Consultas de solo lectura |
+| **Custom endpoint** | — | Subconjunto específico de instancias | Casos de uso especializados |
+| **Instance endpoint** | — | Una instancia específica | Diagnóstico, tuning |
+
+---
+
+### El concepto clave: Custom Endpoints
+
+El texto resuelve este escenario: **tienes instancias de alta y baja capacidad, y quieres separar el tráfico de producción del de reportes.**
+
+```
+Tráfico de producción  →  Custom Endpoint A  →  Instancias de ALTA capacidad
+Consultas de reportes  →  Custom Endpoint B  →  Instancias de BAJA capacidad
+```
+
+Esto es posible porque un **custom endpoint** te permite agrupar instancias según criterios propios, como:
+- Clase de instancia (`db.r5.4xlarge` vs `db.t3.medium`)
+- Grupo de parámetros específico
+- Cualquier subconjunto lógico que definas
+
+---
+
+### ¿Por qué las otras opciones están mal?
+
+**❌ Solo usar el reader endpoint para todo**
+> El reader endpoint solo balancea carga entre réplicas, pero no distingue entre instancias de alta o baja capacidad. No cumple el requisito de separar cargas por capacidad.
+
+**❌ Cluster endpoint para producción + reader endpoint para reportes**
+> El cluster endpoint apunta a la instancia primaria (escritura). No dirige a instancias de alta capacidad específicas, y mezclar endpoints sin criterio de capacidad no resuelve el problema.
+
+**❌ No hacer nada, Aurora lo hace automáticamente**
+> Aurora **no** separa tráfico por capacidad de forma automática. Eso es responsabilidad tuya mediante custom endpoints.
+
+---
+
+### Resumen mental
+
+Piensa en los endpoints como **recepcionistas especializados**:
+- El *writer* siempre te manda al jefe (instancia primaria).
+- El *reader* te manda a cualquier asistente disponible (réplicas).
+- El *custom* te manda exactamente al equipo que tú configuraste previamente.
+
+&nbsp;
+
+
+&nbsp;
+
+
+&nbsp;
+
+
+## Almacenamiento Hot vs Cold para ML en AWS
+
+### Clasificación del almacenamiento por temperatura
+
+```
+HOT   → Datos frecuentemente accedidos → Alto rendimiento, mayor costo
+WARM  → Datos ocasionalmente accedidos → Balance rendimiento/costo
+COLD  → Datos raramente accedidos      → Bajo rendimiento, mínimo costo
+```
+
+---
+
+### Los dos requisitos del escenario
+
+| Requisito | Característica clave | Servicio correcto |
+|---|---|---|
+| Hot storage | Alto rendimiento + **paralelo** + concurrente | **Amazon FSx for Lustre** |
+| Cold storage | **Costo-efectivo** + archivado | **Amazon S3 (Glacier)** |
+
+---
+
+### ¿Por qué FSx for Lustre para hot storage?
+
+Lustre es un sistema de archivos **paralelo y distribuido** (open-source) que:
+- Divide los datos entre múltiples servidores de red simultáneamente
+- Elimina cuellos de botella en workloads de alto procesamiento
+- Es el estándar de facto para **Machine Learning y HPC** (High Performance Computing)
+
+```
+Dataset → FSx for Lustre → Múltiples nodos procesan en paralelo
+                           └── Nodo 1, Nodo 2, Nodo 3... (concurrente)
+```
+
+### ¿Por qué S3 para cold storage?
+
+S3 ofrece una jerarquía de almacenamiento que lo hace ideal para datos fríos:
+
+```
+S3 Standard          → Hot data
+S3 Standard-IA       → Warm data
+S3 Glacier           → Cold data    ← aplica aquí
+S3 Glacier Deep Archive → Coldest   ← o aquí (más barato aún)
+```
+
+---
+
+### Por qué las otras opciones fallan
+
+**❌ FSx for Lustre + EBS Provisioned IOPS (io1)**
+> EBS io1 está diseñado para hot data de I/O intensivo, no para archivado frío. El EBS Cold HDD existe, pero es significativamente más caro que S3 Glacier, por lo que no cumple el requisito de "cost-effective".
+
+**❌ Amazon EFS + S3**
+> EFS sí permite acceso concurrente, pero **no tiene sistema de archivos paralelo**. Para workloads de ML que necesitan máximo rendimiento, EFS no es suficiente. FSx for Lustre lo supera ampliamente en performance.
+
+**❌ FSx for Windows File Server + S3**
+> FSx for Windows usa protocolo **SMB + NTFS**, diseñado para entornos Windows empresariales. No tiene arquitectura de sistema de archivos paralelo como Lustre.
+
+---
+
+### Regla mental para el examen
+
+> - "Alto rendimiento + paralelo + ML/HPC" → **FSx for Lustre**
+> - "Windows + Active Directory + SMB" → **FSx for Windows**
+> - "Archivado barato + cold storage" → **S3 Glacier / Glacier Deep Archive**
+> - "Almacenamiento compartido general en la nube" → **EFS**
+
+&nbsp;
+
+
+&nbsp;
+
+
+&nbsp;
+
+
+## Aurora MySQL Native Functions + Lambda: Reacción a Cambios de Datos
+
+### El concepto clave: RDS Events vs. Database Events
+
+Esta es la trampa central de la pregunta:
+
+```
+RDS Event Subscriptions          Aurora Native Functions
+───────────────────────          ───────────────────────
+Eventos de INFRAESTRUCTURA       Eventos de DATOS
+├── Failover                     ├── INSERT
+├── Mantenimiento                ├── UPDATE
+├── Backup completado            └── DELETE  ← aplica aquí
+└── Cambio de parámetros
+❌ NO detecta DELETE de filas    ✅ SÍ detecta cambios en datos
+```
+
+---
+
+### La solución correcta paso a paso
+
+```
+1. Vehículo vendido
+       ↓
+2. DELETE en tabla Aurora MySQL
+       ↓
+3. Native function (lambda_sync / lambda_async) dispara automáticamente
+       ↓
+4. AWS Lambda recibe los datos del listing eliminado
+       ↓
+5. Lambda envía datos a SQS Queue
+       ↓
+6. Sistema distribuido consume el mensaje de SQS
+```
+
+Aurora MySQL ofrece dos funciones nativas para invocar Lambda:
+
+| Función | Comportamiento |
+|---|---|
+| `lambda_sync` | Invocación **síncrona** → espera respuesta de Lambda |
+| `lambda_async` | Invocación **asíncrona** → no espera respuesta |
+
+---
+
+### Por qué las 3 opciones con "RDS Event Subscription" están mal
+
+Las tres opciones incorrectas comparten el mismo error fundamental: usan **RDS Event Subscriptions**, que solo capturan eventos operacionales/infraestructura, **nunca cambios en los datos** como un `DELETE` en una tabla.
+
+| Opción incorrecta | Error adicional |
+|---|---|
+| RDS Events → SNS → SQS → Lambda | RDS Events no captura `DELETE` de filas |
+| RDS Events → SQS → SNS → Lambda | Mismo problema + el fanout va en dirección incorrecta (SQS no hace fanout a SNS) |
+| RDS Events → Lambda → SQS | Mismo problema de raíz |
+
+---
+
+### Regla mental para el examen
+
+> - Reaccionar a **cambios en datos** (INSERT/UPDATE/DELETE) en Aurora MySQL → **Native Functions** (`lambda_sync`/`lambda_async`)
+> - Reaccionar a **eventos de infraestructura** RDS (failover, backup, mantenimiento) → **RDS Event Subscriptions**
+ 
+ &nbsp;   
+ 
+ &nbsp;   
+ 
+ &nbsp;
+
+
+## RDS Enhanced Monitoring: Visibilidad Granular del Sistema Operativo
+
+### El problema central del escenario
+
+Se necesita monitorear **por proceso/thread** el uso de CPU y memoria. Esto requiere visibilidad a nivel de sistema operativo, no solo métricas agregadas.
+
+---
+
+### CloudWatch estándar vs Enhanced Monitoring
+
+```
+CloudWatch estándar              Enhanced Monitoring
+───────────────────              ───────────────────
+Datos del HIPERVISOR             Datos del AGENTE en la instancia
+Vista agregada de la VM          Vista granular del OS
+CPU total de la instancia        CPU por proceso/thread individual
+Menos preciso en instancias      Más preciso y detallado
+pequeñas (comparten hipervisor)  independiente del hipervisor
+```
+
+Enhanced Monitoring responde exactamente al requisito:
+- ✅ % de CPU por cada proceso
+- ✅ Memoria total consumida por cada proceso
+- ✅ Métricas en tiempo real
+- ✅ Datos retenidos 30 días en CloudWatch Logs (ajustable)
+
+---
+
+### Por qué las otras opciones fallan
+
+| Opción | Por qué no cumple el requisito |
+|---|---|
+| **CPU% y MEM% en consola RDS** | Esas métricas **no están disponibles** directamente en la consola RDS como lo describe la opción |
+| **CloudWatch estándar** | Solo ve CPU agregada desde el hipervisor, no por proceso individual |
+| **Script custom → CloudWatch** | No tienes acceso directo al OS de RDS (a diferencia de EC2). No puedes instalar agentes o scripts personalizados |
+
+---
+
+### El punto clave sobre RDS vs EC2
+
+```
+EC2                              RDS
+───                              ───
+✅ Acceso al OS                  ❌ Sin acceso directo al OS
+✅ Puedes instalar agentes        ❌ No puedes instalar scripts
+✅ Custom CloudWatch agent        ✅ Enhanced Monitoring (agente
+                                    gestionado por AWS)
+```
+
+> En RDS, AWS gestiona el OS por ti. Por eso la única forma de obtener métricas a nivel de proceso es mediante **Enhanced Monitoring**, que usa un agente que AWS instala y administra automáticamente.
+
+---
+
+### Regla mental para el examen
+
+> - Monitorear **procesos/threads individuales** en RDS → **Enhanced Monitoring**
+> - Monitorear **métricas generales** de la instancia RDS → **CloudWatch**
+> - Monitorear **queries lentas o rendimiento SQL** → **RDS Performance Insights**
+ 
+ &nbsp;   
+ 
+ &nbsp;   
+ 
+ &nbsp;
+
+
+## RDS Enhanced Monitoring: Visibilidad Granular del Sistema Operativo
+
+### El problema central del escenario
+
+Se necesita monitorear **por proceso/thread** el uso de CPU y memoria. Esto requiere visibilidad a nivel de sistema operativo, no solo métricas agregadas.
+
+---
+
+### CloudWatch estándar vs Enhanced Monitoring
+
+```
+CloudWatch estándar              Enhanced Monitoring
+───────────────────              ───────────────────
+Datos del HIPERVISOR             Datos del AGENTE en la instancia
+Vista agregada de la VM          Vista granular del OS
+CPU total de la instancia        CPU por proceso/thread individual
+Menos preciso en instancias      Más preciso y detallado
+pequeñas (comparten hipervisor)  independiente del hipervisor
+```
+
+Enhanced Monitoring responde exactamente al requisito:
+- ✅ % de CPU por cada proceso
+- ✅ Memoria total consumida por cada proceso
+- ✅ Métricas en tiempo real
+- ✅ Datos retenidos 30 días en CloudWatch Logs (ajustable)
+
+---
+
+### Por qué las otras opciones fallan
+
+| Opción | Por qué no cumple el requisito |
+|---|---|
+| **CPU% y MEM% en consola RDS** | Esas métricas **no están disponibles** directamente en la consola RDS como lo describe la opción |
+| **CloudWatch estándar** | Solo ve CPU agregada desde el hipervisor, no por proceso individual |
+| **Script custom → CloudWatch** | No tienes acceso directo al OS de RDS (a diferencia de EC2). No puedes instalar agentes o scripts personalizados |
+
+---
+
+### El punto clave sobre RDS vs EC2
+
+```
+EC2                              RDS
+───                              ───
+✅ Acceso al OS                  ❌ Sin acceso directo al OS
+✅ Puedes instalar agentes        ❌ No puedes instalar scripts
+✅ Custom CloudWatch agent        ✅ Enhanced Monitoring (agente
+                                    gestionado por AWS)
+```
+
+> En RDS, AWS gestiona el OS por ti. Por eso la única forma de obtener métricas a nivel de proceso es mediante **Enhanced Monitoring**, que usa un agente que AWS instala y administra automáticamente.
+
+---
+
+### Regla mental para el examen
+
+> - Monitorear **procesos/threads individuales** en RDS → **Enhanced Monitoring**
+> - Monitorear **métricas generales** de la instancia RDS → **CloudWatch**
+> - Monitorear **queries lentas o rendimiento SQL** → **RDS Performance Insights**
+ 
+ &nbsp;   
+ 
+ &nbsp;   
+ 
+ &nbsp;
+
+
+## DynamoDB Streams + Lambda + SNS: Feature de Notificaciones
+
+### El flujo de la solución correcta
+
+```
+Usuario actualiza su perfil
+         ↓
+   DynamoDB Table
+         ↓
+   DynamoDB Stream  ←── debe habilitarse manualmente
+         ↓
+  Lambda (trigger)  ←── necesita IAM role con permisos
+         ↓
+     SNS Topic
+         ↓
+  Suscriptores reciben email
+```
+
+---
+
+### ¿Qué es DynamoDB Streams?
+
+Es un flujo **ordenado cronológicamente** de todos los cambios en una tabla DynamoDB. Captura:
+- Creaciones (INSERT)
+- Actualizaciones (UPDATE)
+- Eliminaciones (DELETE)
+
+Cada cambio genera un **stream record** con la clave primaria del ítem modificado. Opcionalmente puedes capturar la imagen "antes" y "después" del cambio.
+
+> ⚠️ **DynamoDB Streams NO está habilitado por defecto.** Debe activarse manualmente.
+
+---
+
+### Por qué las otras opciones fallan
+
+| Opción | Error específico |
+|---|---|
+| **DAX + trigger + Lambda + SNS** | DAX es un **caché de lectura en memoria** (acelera reads), no captura cambios de datos. No sirve para este caso |
+| **KCL + Kinesis Adapter + SNS** | Solución técnicamente válida, pero **omite habilitar DynamoDB Streams** primero |
+| **Lambda + Kinesis Adapter + SNS** | Mismo problema: asume que el Stream ya está activo, pero no menciona habilitarlo |
+
+Las dos últimas opciones son variantes del mismo error: **dar por sentado que Streams está habilitado**.
+
+---
+
+### DAX vs DynamoDB Streams: distinción clave
+
+```
+DAX (DynamoDB Accelerator)       DynamoDB Streams
+──────────────────────────       ─────────────────
+Caché en memoria                 Registro de cambios
+Mejora latencia de LECTURA       Captura eventos de escritura
+Responde consultas rápido        Alimenta triggers y pipelines
+No detecta cambios               Ordenado cronológicamente
+```
+
+---
+
+### Regla mental para el examen
+
+> - Reaccionar a **cambios en DynamoDB** en tiempo real → **DynamoDB Streams + Lambda trigger**
+> - **Notificar a múltiples suscriptores** → **SNS Topic**
+> - **Acelerar lecturas** en DynamoDB → **DAX**
+> - DynamoDB Streams **no se activa solo** → siempre debe habilitarse explícitamente
+  
+ &nbsp;   
+ 
+ &nbsp;   
+ 
+ &nbsp;
+
+
+## API Gateway: Throttling y Caché para Manejar Traffic Spikes
+
+### El problema del escenario
+
+Un pico masivo de tráfico puede **sobrecargar los sistemas backend** (Lambda, bases de datos, etc.). Se necesita protegerlos sin migrar a otra arquitectura.
+
+---
+
+### La solución: Throttling + Result Caching en API Gateway
+
+Estas dos funciones actúan como **escudo protector** del backend:
+
+```
+Internet → API Gateway → Lambda → Backend
+              ↑
+    [Throttling + Cache]
+    Filtra y absorbe el tráfico
+    antes de que llegue al backend
+```
+
+**Throttling (límite de solicitudes):**
+```
+Rate limit  → máx. requests por segundo (ej: 1,000 req/s)
+Burst limit → pico momentáneo permitido  (ej: 2,000 req/s por segundos)
+Excede límite → respuesta HTTP 429 (Too Many Requests)
+               → el SDK de API Gateway reintenta automáticamente
+```
+
+**Result Caching:**
+```
+Primera request  → va al backend → respuesta guardada en caché
+Requests siguientes → API Gateway responde desde caché
+                      sin tocar el backend
+```
+
+---
+
+### Por qué las otras opciones no son correctas
+
+| Opción | Por qué falla |
+|---|---|
+| **Migrar a EC2 + ELB + Auto Scaling** | Innecesario. Lambda + API Gateway ya es escalable por diseño |
+| **CloudFront frente a API Gateway** | CloudFront mejora latencia de entrega de contenido estático, pero no protege el backend de requests excesivos |
+| **Mover Lambda a una VPC** | Irrelevante para el problema. VPC controla networking/aislamiento, no manejo de tráfico |
+
+---
+
+### Throttling vs Caché: roles distintos pero complementarios
+
+```
+Throttling                       Result Caching
+──────────                       ──────────────
+Limita CUÁNTAS requests          Limita CUÁNTAS requests
+pasan por segundo                llegan al backend
+                                 
+Protege contra floods            Protege contra requests
+y ataques de volumen             repetidas e idénticas
+
+Responde 429 al exceso           Responde desde memoria
+```
+
+---
+
+### Regla mental para el examen
+
+> - Proteger backend de **picos de tráfico** en API Gateway → **Throttling + Caching**
+> - **Throttling** → controla la tasa de requests
+> - **Caching** → evita llamadas repetidas al backend
+> - **CloudFront** → latencia y distribución de contenido, no protección de backend
+  
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
+
+## FSx for NetApp ONTAP: Block Storage Multi-AZ para Windows
+
+### Los dos requisitos clave del escenario
+
+| Requisito | Implicación |
+|---|---|
+| **Alta disponibilidad multi-AZ** | El storage debe sobrevivir la caída de una AZ |
+| **Block storage de baja latencia** | Se necesita protocolo de bloque (iSCSI), no file storage genérico |
+
+---
+
+### ¿Por qué FSx for NetApp ONTAP es la respuesta?
+
+Es el único servicio de AWS que combina los tres elementos necesarios simultáneamente:
+
+```
+FSx for NetApp ONTAP
+├── ✅ Multi-AZ nativo → alta disponibilidad entre zonas
+├── ✅ Protocolo iSCSI → block storage de baja latencia
+├── ✅ Compatible con Windows Server (también SMB, NFS)
+└── ✅ Latencia sub-millisegundo con almacenamiento SSD
+```
+
+---
+
+### Comparación de todas las opciones
+
+| Servicio | Protocolo | Multi-AZ | Block Storage | Windows | Veredicto |
+|---|---|---|---|---|---|
+| **FSx for Windows File Server** | SMB | ✅ | ❌ Solo file | ✅ | ❌ No soporta iSCSI/block |
+| **Amazon EFS** | NFS | ✅ | ❌ Solo file | ❌ Optimizado Linux | ❌ No apto para Windows |
+| **Amazon S3** | HTTP/REST | ✅ | ❌ Object storage | ⚠️ | ❌ No es block storage |
+| **FSx for NetApp ONTAP** | iSCSI, SMB, NFS | ✅ | ✅ | ✅ | ✅ Cumple todo |
+
+---
+
+### Los tres tipos de almacenamiento y sus protocolos
+
+```
+Block Storage   → iSCSI, EBS          → baja latencia, apps críticas
+File Storage    → SMB, NFS            → archivos compartidos
+Object Storage  → HTTP/REST (S3)      → datos no estructurados, backups
+```
+
+> Una aplicación de trading financiero necesita **block storage** por su naturaleza transaccional y requerimiento de latencia mínima.
+
+---
+
+### Diferencia entre los dos FSx para Windows
+
+```
+FSx for Windows File Server      FSx for NetApp ONTAP
+───────────────────────          ────────────────────
+Solo protocolo SMB               SMB + NFS + iSCSI
+Solo file storage                File + Block storage
+Exclusivo para Windows           Multi-OS (Win, Linux, Mac)
+Sin iSCSI                        ✅ iSCSI nativo
+```
+
+---
+
+### Regla mental para el examen
+
+> - **Block storage + Multi-AZ + Windows + iSCSI** → **FSx for NetApp ONTAP**
+> - **File storage compartido solo para Windows** → **FSx for Windows File Server**
+> - **File storage para Linux/multi-OS** → **EFS**
+> - **Object storage escalable** → **S3**
+   
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
+
+## S3 Transfer Acceleration + Multipart Upload: Transferencia Global Rápida
+
+### El contexto del escenario
+
+```
+Múltiples países          →          N. Virginia (us-east-1)
+(500 GB por sitio)                   Weather App + S3 Bucket
+     ↑
+Conexión de alta velocidad disponible
+→ El problema no es el ancho de banda local,
+  sino la LATENCIA de larga distancia en internet
+```
+
+---
+
+### La solución: Transfer Acceleration + Multipart Upload
+
+Estas dos tecnologías se complementan perfectamente:
+
+**Transfer Acceleration** resuelve el problema de distancia:
+```
+Sin Transfer Acceleration:
+Usuario → Internet público (lento, ruta impredecible) → S3 N.Virginia
+
+Con Transfer Acceleration:
+Usuario → Edge Location CloudFront más cercana → Red privada AWS (rápida) → S3 N.Virginia
+         (corto tramo internet)                  (backbone optimizado)
+```
+Mejora de velocidad: **50-500%** en transferencias de larga distancia.
+
+**Multipart Upload** resuelve el problema del tamaño:
+```
+Archivo 500 GB dividido en partes
+├── Parte 1 ──┐
+├── Parte 2 ──┼──→ S3 (en paralelo) → ensamblado automático
+├── Parte 3 ──┘
+└── ...
+Ventajas: transferencia paralela + recuperación ante fallos por parte
+```
+
+---
+
+### Por qué las otras opciones son más lentas
+
+| Opción | Tiempo aproximado | Por qué no es la más rápida |
+|---|---|---|
+| **Snowball Edge** | ~1 semana end-to-end | Es físico: envío, carga, ingestión en AWS |
+| **S3 Cross-Region Replication** | ~15 minutos de replicación | Doble transferencia: subir + replicar. No es inmediato |
+| **Site-to-Site VPN** | Variable, pero lento | Diseñado para conectar redes on-premises a VPC, no para transferencia masiva de datos |
+
+---
+
+### Regla mental para el examen
+
+> - Transferencia **rápida** de datos a S3 desde **múltiples ubicaciones globales** → **Transfer Acceleration + Multipart Upload**
+> - Transferencia de **datos masivos** (petabytes) sin internet disponible → **Snowball / Snowball Edge**
+> - **Replicación automática** entre regiones S3 → **Cross-Region Replication** (no es la más rápida)
+> - **Conectar red on-premises a VPC** → **Site-to-Site VPN / Direct Connect**
+   
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
+
+## API Gateway: Canary Release vs Otras Estrategias de Deployment
+
+### Los requisitos del escenario
+
+- **Mínima disrupción** para los clientes
+- **Mínima pérdida de datos** durante la actualización
+- Solución **costo-efectiva**
+
+---
+
+### ¿Qué es Canary Release?
+
+Estrategia que libera la nueva versión a un **subconjunto pequeño** de usuarios primero:
+
+```
+Todo el tráfico (100%)
+         ↓
+   API Gateway
+   ├── Producción (90%) → versión actual estable
+   └── Canary Stage (10%) → nueva versión
+              ↓
+   Monitorear → si todo bien → aumentar % gradualmente
+              → si hay problemas → rollback sin afectar al resto
+              ↓
+   Eventualmente: Canary promovido a Producción (100%)
+```
+
+---
+
+### Comparación de las cuatro estrategias
+
+| Estrategia | Aislamiento | Costo | Riesgo | Veredicto |
+|---|---|---|---|---|
+| **Canary Release** | Alto (% controlado) | Bajo (mismo GW) | Bajo | ✅ |
+| **Blue-Green** | Alto (dos entornos) | **Alto** (doble infraestructura) | Bajo | ❌ Costoso |
+| **Import-to-update (overwrite/merge)** | Ninguno | Bajo | **Alto** (afecta todo simultáneamente) | ❌ Riesgoso |
+| **Nuevo API Gateway + mismo dominio** | Ninguno | Medio | **Alto** (DNS propagation delays + downtime) | ❌ Downtime |
+
+---
+
+### Canary vs Blue-Green: la distinción clave
+
+```
+Blue-Green                       Canary Release
+──────────                       ──────────────
+Dos entornos completos           Un entorno con % de tráfico dividido
+Blue (actual) + Green (nuevo)    Producción + Canary stage
+Switch total cuando validado     Incremento gradual del %
+Mayor costo (doble infra)        Menor costo (mismo API Gateway)
+Rollback: cambiar el switch      Rollback: reducir % a 0
+```
+
+> El escenario pide **costo-efectivo** → Blue-Green queda eliminado por su doble infraestructura.
+
+---
+
+### Regla mental para el examen
+
+> - **Mínima disrupción + costo-efectivo** en API Gateway → **Canary Release**
+> - **Dos entornos paralelos completos** → **Blue-Green** (más costoso pero más aislado)
+> - Cuando el requisito menciona **"cost-effective"** y hay una opción Blue-Green → generalmente **no es la respuesta correcta**
+   
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
+
+## Kinesis + Lambda + DynamoDB: Anonimización de PII en Tiempo Real
+
+### El requisito crítico del escenario
+
+> PII debe ser anonimizada **ANTES** de llegar a cualquier sistema de almacenamiento.
+
+Esta condición elimina inmediatamente cualquier solución que almacene datos primero y anonimice después.
+
+---
+
+### La solución correcta: anonimización en tránsito
+
+```
+Fuentes múltiples
+      ↓
+Kinesis Data Stream    ← ingesta en tiempo real, escalable
+      ↓
+AWS Lambda             ← anonimiza PII EN TRÁNSITO (nunca toca storage)
+      ↓
+Amazon DynamoDB        ← solo recibe datos ya anonimizados ✅
+      (NoSQL)
+```
+
+---
+
+### Por qué las otras opciones violan el requisito principal
+
+| Opción | El problema |
+|---|---|
+| **S3 → Lambda → DynamoDB** | PII se almacena en S3 **primero**, luego se anonimiza. Viola el requisito |
+| **DynamoDB → DynamoDB Streams → Lambda** | PII se escribe en DynamoDB **primero**, luego Lambda anonimiza. Viola el requisito. Además, `AmazonDynamoDBFullAccess` viola el principio de **mínimo privilegio** |
+| **Firehose → Redshift** | Redshift es un **data warehouse relacional**, no una base de datos NoSQL |
+
+---
+
+### La regla de oro: ¿cuándo ocurre la anonimización?
+
+```
+❌ Almacenar → Anonimizar    (S3 o DynamoDB primero)
+              PII toca el storage aunque sea brevemente
+
+✅ Anonimizar → Almacenar    (Lambda en tránsito)
+              PII nunca llega al storage
+```
+
+---
+
+### Comparación de servicios de streaming
+
+| Servicio | Caso de uso | Procesa con Lambda |
+|---|---|---|
+| **Kinesis Data Streams** | Streaming en tiempo real, procesamiento personalizado | ✅ Sí |
+| **Amazon Data Firehose** | Entrega directa a destinos (S3, Redshift, etc.) | ✅ Sí (transformación limitada) |
+| **DynamoDB Streams** | Reaccionar a cambios en una tabla DynamoDB | ✅ Sí, pero datos ya en DB |
+
+---
+
+### Regla mental para el examen
+
+> - **Streaming en tiempo real + transformación antes de almacenar** → **Kinesis Data Streams + Lambda**
+> - **PII que no debe tocar ningún storage** → la transformación debe ocurrir **en tránsito**
+> - **NoSQL en AWS** → **DynamoDB**
+> - **Data warehouse relacional** → **Redshift** (no es NoSQL)
+> - Permisos excesivos como `FullAccess` → siempre violación del **principio de mínimo privilegio**
+
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
+
+## Auto Scaling: Target Tracking vs Otras Políticas de Escalado
+
+### El problema del escenario
+
+**Over-provisioning** = demasiados recursos activos → costos innecesariamente altos. Se necesita una política que ajuste la capacidad **dinámicamente y con precisión**.
+
+---
+
+### Comparación de todas las políticas de Auto Scaling
+
+| Política | Cómo funciona | Ideal para | Problema |
+|---|---|---|---|
+| **Target Tracking** | Mantiene una métrica en un valor objetivo automáticamente | Optimización continua de costos ✅ | — |
+| **Simple Scaling** | Escala cuando una alarma CloudWatch se dispara | Casos básicos | Debe esperar el **cooldown period** antes de escalar de nuevo |
+| **Step Scaling** | Escala en pasos según el tamaño del breach de la alarma | Respuesta granular a cambios | Más complejo de configurar |
+| **Scheduled Scaling** | Escala en horarios predefinidos | Tráfico **predecible** (ej: más usuarios de 9am-5pm) | No sirve para tráfico variable |
+| **Suspend/Resume** | Pausa temporalmente todas las actividades de scaling | Mantenimiento temporal | No es una política de escalado dinámico |
+
+---
+
+### ¿Por qué Target Tracking es la mejor opción?
+
+```
+Ejemplo: Target = 50% CPU
+
+CPU sube a 80% → ASG agrega instancias automáticamente
+CPU baja a 30% → ASG remueve instancias automáticamente
+                  ↑
+         Sin esperar cooldown period
+         Sin configurar alarmas manualmente
+         Se ajusta a patrones cambiantes de carga
+```
+
+Ventajas clave:
+- ✅ **No necesitas crear alarmas CloudWatch** manualmente
+- ✅ **No hay cooldown period** que bloquee nuevas acciones
+- ✅ Ajuste continuo → evita over-provisioning y under-provisioning
+- ✅ Responde a cambios en patrones de carga dinámicamente
+
+---
+
+### Regla mental para el examen
+
+> - **Optimizar costos + evitar over-provisioning** → **Target Tracking Scaling**
+> - **Tráfico predecible** (horarios fijos) → **Scheduled Scaling**
+> - **Respuesta escalonada** según magnitud del problema → **Step Scaling**
+> - **Pausar scaling temporalmente** → **Suspend and Resume**
+> - Simple Scaling → obsoleto en la práctica, tiene limitación del cooldown period
+   
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
 
 ## DynamoDB: Base de Datos NoSQL para Esquemas Flexibles
 
@@ -2352,6 +1642,7 @@ DynamoDB:
 
 &nbsp;
 
+
 ## DynamoDB: Diseño de Partition Keys para Alto Rendimiento
 
 ### El concepto central: ¿Cómo distribuye DynamoDB los datos?
@@ -2424,80 +1715,6 @@ Composite Primary Key:
 
 &nbsp;
 
-## Identity Federation con AD Connector + IAM Roles
-
-### Los requisitos del escenario
-
-```
-1. Acceso a AWS Console para developers
-2. Identity federation (usar identidades existentes, no crear nuevas en AWS)
-3. Role-based access control
-4. Roles ya asignados via grupos en Active Directory corporativo
-```
-
----
-
-### La solución: AD Connector + IAM Roles
-
-```
-Corporate Active Directory (on-premises)
-├── Grupos con roles ya definidos
-└── Usuarios de developers
-         ↓
-AWS Directory Service AD Connector
-(gateway que redirige requests al AD corporativo)
-         ↓
-IAM Roles (asignados a usuarios/grupos del AD)
-         ↓
-Acceso a AWS Console ✅
-```
-
----
-
-### Comparación de opciones de AWS Directory Service
-
-| Servicio | Descripción | ¿Aplica aquí? |
-|---|---|---|
-| **AD Connector** | Gateway que **redirige** requests al AD on-premises existente | ✅ Integra AD corporativo existente |
-| **Simple AD** | AD standalone en AWS con funciones básicas | ❌ No conecta con AD corporativo existente |
-| **AWS Managed Microsoft AD** | AD completo administrado por AWS en la nube | ❌ Crea un AD nuevo, no usa el existente |
-
----
-
-### Por qué las otras opciones son incorrectas
-
-| Opción | Por qué no aplica |
-|---|---|
-| **Simple AD** | Subconjunto de features, no redirige al AD corporativo. Es un directorio independiente |
-| **IAM Groups** | Colección de usuarios IAM. No integra con Active Directory ni soporta federation |
-| **AWS Lambda** | Servicio de computación serverless, sin relación con autenticación/identidad |
-
----
-
-### IAM Roles vs IAM Groups en este contexto
-
-```
-IAM Groups                       IAM Roles
-──────────                       ─────────
-Agrupa usuarios IAM nativos      Puede asignarse a usuarios/grupos
-Solo para identidades en AWS     de Active Directory federados ✅
-No soporta federation            Soporta identity federation ✅
-```
-
----
-
-### Regla mental para el examen
-
-> - **AD corporativo existente + AWS** → **AD Connector** (no Simple AD)
-> - **Identity federation + permisos AWS** → **IAM Roles** (no IAM Groups)
-> - **Simple AD** → directorio standalone básico en AWS, sin conexión al AD on-premises
-> - **IAM Groups** → solo para usuarios IAM nativos de AWS, no para federation
-
-&nbsp;   
-
-&nbsp;   
-
-&nbsp;
 
 ## AWS Transfer for SFTP + S3 + Lifecycle Rules: SFTP Administrado
 
@@ -2575,78 +1792,6 @@ Sin AWS Transfer:                Con AWS Transfer:
 
 &nbsp;
 
-## KMS Custom Key Store + CloudHSM: Control Total sobre Claves de Cifrado
-
-### Los tres requisitos específicos del escenario
-
-```
-1. Control total sobre el cifrado de las claves
-2. Capacidad de eliminar el key material de AWS KMS inmediatamente
-3. Auditar el uso de claves independientemente de AWS CloudTrail
-```
-
-Estos tres requisitos juntos apuntan a una sola solución: **KMS Custom Key Store + CloudHSM**.
-
----
-
-### Los tipos de KMS Keys y su nivel de control
-
-| Tipo de Key | ¿Quién la gestiona? | Control del cliente | Auditoría independiente |
-|---|---|---|---|
-| **AWS Owned Keys** | AWS (completamente) | ❌ Ninguno | ❌ No |
-| **AWS Managed Keys** | AWS (automáticamente) | ❌ Limitado | ❌ No |
-| **Customer Managed Keys** | Cliente (en KMS estándar) | ✅ Alto | ⚠️ Solo via CloudTrail |
-| **Custom Key Store (CloudHSM)** | Cliente (en su propio HSM) | ✅ Total | ✅ Independiente de CloudTrail |
-
----
-
-### ¿Cómo funciona el Custom Key Store?
-
-```
-AWS KMS (front-end)
-         ↓ genera y usa keys
-Tu propio CloudHSM Cluster
-├── Key material NUNCA sale del HSM en texto plano
-├── Tú controlas el ciclo de vida de las keys
-├── Puedes eliminar key material inmediatamente ✅
-└── Auditoría independiente de AWS CloudTrail ✅
-```
-
----
-
-### Por qué las otras opciones fallan
-
-| Opción | Error específico |
-|---|---|
-| **Custom Key Store + Amazon S3** | S3 es almacenamiento general, no tiene el nivel de seguridad criptográfica de un HSM. No cumple los requisitos de control y auditoría |
-| **AWS Owned Keys + CloudHSM** | AWS Owned Keys son gestionadas completamente por AWS → sin control del cliente ❌ |
-| **AWS Managed Keys + CloudHSM** | AWS Managed Keys también son gestionadas por AWS → sin auditoría independiente de CloudTrail ❌ |
-
----
-
-### Cuándo usar Custom Key Store (criterios clave)
-
-```
-✅ Necesitas HSM dedicado bajo tu control directo (single-tenancy)
-✅ Debes poder revocar/eliminar key material inmediatamente
-✅ Compliance requiere auditoría independiente de AWS KMS y CloudTrail
-```
-
----
-
-### Regla mental para el examen
-
-> - **Control total + eliminar key material + auditoría independiente** → **KMS Custom Key Store + CloudHSM**
-> - **Keys gestionadas por AWS sin overhead** → **AWS Managed Keys**
-> - **Keys del cliente en KMS estándar** → **Customer Managed Keys**
-> - **CloudHSM sin KMS** → HSM dedicado para casos que no requieren integración con servicios AWS
-> - **Amazon S3** → nunca para almacenar key material criptográfico
-   
-&nbsp;   
-
-&nbsp;   
-
-&nbsp;
 
 ## AWS Storage Gateway File Gateway: Backup Híbrido con SMB y Caché Local
 
@@ -2712,178 +1857,6 @@ Amazon S3 Glacier (archivado por 10 años) ✅
 
 &nbsp;
 
-## RDS Multi-AZ: Replicación Síncrona para Alta Disponibilidad
-
-Esta pregunta evalúa una distinción fundamental que ya hemos visto en conversaciones anteriores, pero aquí va el resumen preciso:
-
-### La distinción clave: Síncrono vs Asíncrono
-
-```
-Multi-AZ (Síncrono)              Read Replica (Asíncrono)
-───────────────────              ─────────────────────────
-Escribe en primario              Escribe en primario
-    ↓ simultáneamente                ↓ después
-Escribe en standby               Replica en segundo plano
-→ Ambos siempre en sync ✅       → Puede haber lag ⚠️
-→ Failover automático            → Promoción manual
-→ Alta disponibilidad            → Escalar lecturas
-```
-
----
-
-### Por qué las otras opciones son incorrectas
-
-| Opción | Error |
-|---|---|
-| **RDS Read Replica** | Replicación **asíncrona**, no síncrona. Para escalar lecturas, no para HA |
-| **DynamoDB Read Replica** | DynamoDB **no tiene** Read Replicas. Usa Global Tables para replicación multi-región |
-| **CloudFront Multi-AZ** | CloudFront **no tiene** Multi-AZ ni replica datos de base de datos. Es una CDN que cachea contenido en edge locations |
-
----
-
-### Regla mental para el examen
-
-> - **Replicación síncrona + failover automático** → **RDS Multi-AZ**
-> - **Replicación asíncrona + escalar lecturas** → **RDS Read Replica**
-> - **Replicación multi-región en DynamoDB** → **Global Tables**
-
-&nbsp;   
-
-&nbsp;   
-
-&nbsp;
-
-## S3 Versioning + MFA Delete: Protección contra Borrado Accidental
-
-### Los dos mecanismos de protección correctos
-
-**1. Versioning → preserva todas las versiones**
-```
-Sin Versioning:
-DELETE objeto.txt → objeto desaparecido para siempre ❌
-
-Con Versioning:
-DELETE objeto.txt → S3 agrega un "delete marker"
-                    versiones anteriores siguen existiendo ✅
-                    → puedes restaurar eliminando el delete marker
-```
-
-**2. MFA Delete → capa adicional de seguridad**
-```
-Para operaciones destructivas irreversibles se requiere:
-├── Credenciales de seguridad normales
-└── Código de 6 dígitos del dispositivo MFA físico
-
-Protege contra:
-├── Cambiar el estado de Versioning del bucket
-└── Eliminar permanentemente una versión de objeto
-```
-
----
-
-### Por qué las otras opciones no cumplen el requisito
-
-| Opción | Por qué falla |
-|---|---|
-| **IAM bucket policy que niega Delete** | Bloquea **todos** los deletes, incluyendo los intencionales. El requisito es proteger contra accidentales, no prohibir todos |
-| **Pre-signed URLs solamente** | Controla acceso temporal a objetos, no previene borrados accidentales |
-| **S3 Intelligent-Tiering** | Optimiza costos moviendo datos entre clases de storage. No tiene relación con protección contra borrado |
-
----
-
-### La combinación correcta y por qué funciona juntos
-
-```
-Versioning                       MFA Delete
-──────────                       ──────────
-Guarda todas las versiones       Requiere MFA para eliminar
-Permite recuperar objetos        versiones permanentemente
-borrados accidentalmente         
-Primera línea de defensa ✅      Segunda línea de defensa ✅
-```
-
----
-
-### Regla mental para el examen
-
-> - **Recuperar objetos borrados/sobreescritos accidentalmente** → **Versioning**
-> - **Prevenir borrado permanente sin autorización fuerte** → **MFA Delete**
-> - Ambos juntos = protección completa contra borrado accidental e intencional no autorizado
-> - **Pre-signed URLs** → acceso temporal controlado, no protección contra borrado
-> - **IAM Deny Delete** → demasiado restrictivo, bloquea también borrados legítimos
-   
-&nbsp;   
-
-&nbsp;   
-
-&nbsp;
-
-## AWS WAF + Firewall Manager: Protección SQL Injection Multi-Cuenta
-
-### Los dos requisitos del escenario
-
-```
-1. Bloquear SQL injection attacks en ALBs
-2. Aplicar la protección en múltiples cuentas AWS
-```
-
----
-
-### La solución: WAF + Firewall Manager
-
-```
-AWS WAF
-├── Managed Rule: AWSManagedRulesSQLiRuleSet
-│   └── Bloquea patrones de SQL injection ✅
-├── Asociado al Application Load Balancer
-└── Web ACL con acción: BLOCK
-
-          +
-
-AWS Firewall Manager
-└── Centraliza y reutiliza las reglas WAF
-    en todas las cuentas AWS de la organización ✅
-```
-
----
-
-### Por qué las otras opciones fallan
-
-| Opción | Servicio mal usado | Error específico |
-|---|---|---|
-| **Network Firewall + refactorizar** | Network Firewall protege VPCs, no ALBs específicamente. Refactorizar requiere tiempo enorme | ❌ No es solución inmediata |
-| **GuardDuty + Security Hub** | GuardDuty es **detección de amenazas**, no puede asociarse a un ALB ni bloquear tráfico | ❌ No bloquea, solo detecta |
-| **Macie + Audit Manager** | Macie protege **datos sensibles en S3**. Audit Manager es para compliance/auditoría, no seguridad de red | ❌ Servicios completamente irrelevantes |
-
----
-
-### Mapa de servicios de seguridad AWS
-
-```
-Capa de aplicación (HTTP/SQL injection/XSS)  → AWS WAF
-Capa de red/VPC (firewall stateful)          → AWS Network Firewall
-Ataques DDoS volumétricos                    → AWS Shield Advanced
-Detección de amenazas con ML                 → Amazon GuardDuty
-Datos sensibles en S3 (PII)                  → Amazon Macie
-Gestión centralizada multi-cuenta de WAF     → AWS Firewall Manager
-Auditoría de compliance                      → AWS Audit Manager
-```
-
----
-
-### Regla mental para el examen
-
-> - **SQL injection / XSS + ALB/CloudFront/API GW** → **AWS WAF**
-> - **Reutilizar reglas WAF en múltiples cuentas** → **AWS Firewall Manager**
-> - **GuardDuty** → detecta, nunca bloquea directamente
-> - **Network Firewall** → protege VPCs, no específicamente ALBs
-> - **Macie** → siempre relacionado con datos sensibles en S3, nunca con ataques web
-   
-&nbsp;   
-
-&nbsp;   
-
-&nbsp;
 
 ## Aurora Auto Scaling: Escalado Dinámico de Read Replicas
 
@@ -2952,6 +1925,7 @@ Costo variable ✅            Costo fijo + transfer ❌     Costo fijo ❌
 &nbsp;   
 
 &nbsp;
+
 
 ## AWS Glue + EventBridge: ETL Automatizado CSV → Parquet
 
@@ -3029,6 +2003,7 @@ Procesa aunque no haya nuevos archivos  Solo procesa cuando hay evento
 
 &nbsp;
 
+
 ## Auto Scaling Default Termination Policy: ¿Cuál instancia se elimina primero?
 
 ### El flujo de decisión por defecto
@@ -3085,216 +2060,6 @@ Paso 4 (aleatorio)            → Desempate final
 
 &nbsp;
 
-## Identity Federation + IAM Roles: SSO para 1200 Usuarios en S3
-
-### Los requisitos del escenario
-
-```
-1. Single Sign-On desde AD/LDAP corporativo (no crear nuevas identidades AWS)
-2. Acceso restringido a carpeta individual por usuario en S3
-3. Solución para 1200 empleados
-```
-
----
-
-### Las dos respuestas correctas
-
-**1. Federation Proxy / Identity Provider + AWS STS**
-```
-Usuario corporativo
-         ↓ credenciales AD/LDAP
-Identity Provider (IdP) / Federation Proxy
-         ↓ autenticación exitosa
-AWS STS (Security Token Service)
-         ↓ genera credenciales temporales
-Acceso a AWS (S3) sin crear IAM users ✅
-```
-
-**2. IAM Role + IAM Policy**
-```
-IAM Policy con variable de política:
-{
-  "Resource": "arn:aws:s3:::bucket/${aws:username}/*"
-                                    ↑
-                          Variable dinámica por usuario
-}
-→ Cada usuario accede SOLO a su carpeta ✅
-```
-
----
-
-### Por qué las otras opciones son incorrectas
-
-| Opción | Por qué falla |
-|---|---|
-| **Soluciones SSO de terceros (Okta, etc.)** | AWS ya provee las herramientas necesarias (STS + Federation). No es necesario pagar por soluciones externas |
-| **Amazon WorkDocs** | Servicio de colaboración de documentos, no tiene integración directa con S3 para este caso |
-| **Crear 1200 IAM Users** | Innecesario y no integra con AD/LDAP corporativo. Viola el requisito de SSO |
-
----
-
-### El flujo completo de Enterprise Identity Federation
-
-```
-AD/LDAP corporativo
-         ↓ SAML 2.0 / OpenID Connect
-Federation Proxy o IdP (ej: AD FS)
-         ↓
-AWS STS → AssumeRoleWithSAML
-         ↓ credenciales temporales
-IAM Role (con policy que usa ${aws:username})
-         ↓
-S3 bucket/nombreusuario/* (solo su carpeta) ✅
-```
-
----
-
-### Regla mental para el examen
-
-> - **SSO + AD/LDAP corporativo + AWS** → **Federation + STS** (no crear IAM Users)
-> - **Restringir acceso por usuario en S3** → **IAM Policy con variables** (`${aws:username}`)
-> - **1200+ usuarios** → nunca crear IAM Users individuales (no escala, no integra con AD)
-> - **STS** → siempre genera credenciales **temporales** (no permanentes)
-   
-&nbsp;   
-
-&nbsp;   
-
-&nbsp;
-
-## AWS DMS con CDC + SSL: Migración y Replicación Continua
-
-### Los requisitos del escenario
-
-```
-1. Copiar MySQL on-premises → S3 como CSV (carga inicial)
-2. Capturar cambios continuos después de la migración (ongoing)
-3. Alta seguridad (conexiones cifradas)
-4. Poco overhead de gestión
-```
-
----
-
-### La solución correcta: DMS Full Load + CDC + SSL
-
-```
-MySQL on-premises
-         ↓ Full Load (carga inicial completa)
-         ↓ + CDC (Change Data Capture - cambios continuos)
-AWS DMS con endpoint SSL
-├── Certificado CA propio añadido a DMS console
-├── Conexión cifrada TLS ✅
-└── Salida en formato .csv por defecto ✅
-         ↓
-Amazon S3 bucket (CSV files)
-         ↓ (futuro)
-Aurora Serverless + RDS Proxy
-```
-
----
-
-### Full Load vs CDC: roles distintos pero complementarios
-
-```
-Full Load                        CDC (Change Data Capture)
-──────────                       ─────────────────────────
-Copia TODOS los datos            Captura SOLO los cambios
-existentes al inicio             después de la carga inicial
-Migración inicial ✅             Sincronización continua ✅
-Una sola vez                     Streaming permanente
-```
-
-> La pregunta requiere **ambos** en la misma tarea DMS.
-
----
-
-### Por qué las otras opciones fallan
-
-| Opción | Error específico |
-|---|---|
-| **DMS Full Load únicamente + Network Firewall para SSL** | Sin CDC → no captura cambios continuos. Network Firewall no crea certificados DMS, eso se hace directo en la consola DMS |
-| **SCT + AWS MGN** | SCT convierte esquemas, no replica datos. MGN es para lift-and-shift de aplicaciones completas, no para replicación de DB |
-| **Snowball Edge + DataSync** | Snowball es para migraciones masivas físicas. DataSync para replicación requiere pasos extra innecesarios cuando DMS lo hace directamente |
-
----
-
-### Regla mental para el examen
-
-> - **Migrar DB + capturar cambios continuos** → **DMS Full Load + CDC**
-> - **Cifrar conexiones DMS** → **SSL con CA certificate** (no Network Firewall)
-> - **Convertir esquema entre motores** → **AWS SCT** (heterogéneo)
-> - **Migrar servidores completos (lift-and-shift)** → **AWS MGN**
-> - **DMS → S3** genera archivos **.csv por defecto** (también soporta Parquet)
-   
-&nbsp;   
-
-&nbsp;   
-
-&nbsp;
-
-## SQS FIFO vs Standard: Eliminando Mensajes Duplicados
-
-### El problema raíz
-
-```
-SQS Standard Queue
-├── Entrega "at-least-once" → puede entregar el mismo mensaje MÁS DE UNA VEZ
-├── Sin garantía de orden
-└── Si EC2 falla antes de eliminar el mensaje → mensaje reaparece → procesado dos veces ❌
-```
-
----
-
-### La solución: SQS FIFO Queue
-
-```
-SQS FIFO Queue
-├── Entrega "exactly-once" → cada mensaje procesado UNA SOLA VEZ ✅
-├── Orden garantizado (First-In-First-Out) ✅
-├── Deduplicación automática de mensajes
-└── Ideal para: pedidos, transacciones financieras, comandos secuenciales
-```
-
----
-
-### Por qué las otras opciones no resuelven el problema
-
-| Opción | Qué hace realmente | ¿Resuelve duplicados? |
-|---|---|---|
-| **Visibility timeout** | Oculta el mensaje mientras se procesa | ❌ No garantiza contra duplicados en Standard queue |
-| **Retention period** | Define cuánto tiempo existe el mensaje en la cola | ❌ No tiene relación con duplicados |
-| **Message size** | Límite de tamaño del mensaje (256 KB) | ❌ Completamente irrelevante |
-| **FIFO Queue** | Exactly-once + orden garantizado | ✅ Elimina duplicados |
-
----
-
-### Standard vs FIFO: comparación directa
-
-```
-SQS Standard                     SQS FIFO
-────────────                      ─────────
-At-least-once delivery ❌         Exactly-once delivery ✅
-Sin orden garantizado             Orden garantizado (FIFO)
-Throughput ilimitado              300 msg/s (3,000 con batching)
-Más barato                        Ligeramente más costoso
-Para alta escala sin importar     Para orden y no-duplicación
-duplicados                        críticos
-```
-
----
-
-### Regla mental para el examen
-
-> - **Mensajes duplicados en SQS** → **FIFO Queue** (exactly-once delivery)
-> - **Orden de procesamiento crítico** → **FIFO Queue**
-> - **Máximo throughput sin importar duplicados** → **Standard Queue**
-> - **Visibility timeout** → evita que otros consumidores vean el mensaje, pero NO elimina duplicados
-   
-&nbsp;   
-
-&nbsp;   
-
-&nbsp;
 
 ## Amazon Neptune + Neptune Streams: Base de Datos de Grafos para Recomendaciones
 
@@ -3373,157 +2138,6 @@ Data warehouse (OLAP)     → Amazon Redshift
 
 &nbsp;
 
-## EC2 Billing: Cuándo se Cobra y Cuándo No
-
-### Mapa de estados EC2 y su facturación
-
-```
-pending      → ❌ NO se cobra (preparando para ejecutar)
-running      → ✅ SÍ se cobra (estado normal de operación)
-stopping     → ⚠️ DEPENDE:
-               ├── Preparando para STOP    → ❌ NO se cobra
-               └── Preparando para HIBERNATE → ✅ SÍ se cobra
-stopped      → ❌ NO se cobra (apagado)
-shutting-down → ❌ NO se cobra (preparando para terminar)
-terminated   → ⚠️ DEPENDE del tipo:
-               ├── On-Demand terminada     → ❌ NO se cobra
-               └── Reserved Instance terminada → ✅ SÍ se cobra
-                   (hasta el fin del término contratado)
-```
-
----
-
-### Las dos respuestas correctas explicadas
-
-**✅ On-Demand en `stopping` preparando para hibernar → SE COBRA**
-> Durante hibernación, el contenido de RAM se guarda en el volumen EBS. La instancia mantiene su estado y sigue incurriendo en cargos durante este proceso.
-
-**✅ Reserved Instance en estado `terminated` → SE COBRA**
-> Las Reserved Instances se pagan por contrato (1 o 3 años). Aunque la instancia se termine, el compromiso de pago continúa hasta el fin del término.
-
----
-
-### Por qué las otras opciones son incorrectas
-
-| Opción | Por qué es falsa |
-|---|---|
-| **Spot instance en `stopping`** | No se cobra cuando se prepara para detenerse |
-| **On-Demand en `pending`** | Pending es solo preparación inicial, sin cargo |
-| **"No se cobra si no está en `running`"** | Falso: hibernación (`stopping`) y Reserved terminadas sí se cobran |
-
----
-
-### Regla mental para el examen
-
-> - **`stopping` → stop** = no se cobra
-> - **`stopping` → hibernate** = sí se cobra
-> - **Reserved Instance terminada** = sigue cobrándose hasta fin del contrato
-> - **`pending`, `stopped`, `shutting-down`** = no se cobra en On-Demand/Spot
-   
-&nbsp;   
-
-&nbsp;   
-
-&nbsp;
-
-## S3 + DynamoDB: Solución Costo-Efectiva para Base de Datos GIS
-
-### Los requisitos del escenario
-
-```
-1. Almacenar imágenes de alta resolución con códigos geográficos
-2. Actualizaciones frecuentes (minuto a minuto)
-3. Alta disponibilidad y escalabilidad
-4. Migrar desde Oracle
-5. Costo-efectivo
-```
-
----
-
-### La solución correcta: S3 + DynamoDB
-
-```
-Imagen de alta resolución → Amazon S3 (object storage) ✅
-                                    ↓ URL del objeto
-DynamoDB Table:
-┌─────────────────┬──────────────────────────────┐
-│ geographic_code │ image_s3_url                 │
-│ (Primary Key)   │ (valor asociado)             │
-├─────────────────┼──────────────────────────────┤
-│ GEO-LAT123      │ s3://bucket/imagen-123.tif   │
-│ GEO-LAT456      │ s3://bucket/imagen-456.tif   │
-└─────────────────┴──────────────────────────────┘
-```
-
-**¿Por qué esta combinación?**
-- S3 → almacenamiento ilimitado y económico para imágenes grandes
-- DynamoDB → clave-valor de baja latencia, altamente escalable, sin servidor que gestionar
-
----
-
-### Por qué las otras opciones fallan
-
-| Opción | Error específico |
-|---|---|
-| **RDS Oracle Multi-AZ** | Almacenar imágenes como BLOBs en Oracle es costoso (licencias Oracle + instancias grandes). S3 es mucho más económico para objetos estáticos |
-| **S3 + Amazon Keyspaces (Cassandra)** | Keyspaces es para datos de alta velocidad con esquemas flexibles. DynamoDB es más adecuado para este simple caso de clave-valor |
-| **DynamoDB + DAX para imágenes** | ❌ Dos problemas: (1) Las imágenes de alta resolución exceden el límite de 400 KB por ítem en DynamoDB. (2) DAX optimiza **lecturas**, pero el sistema es **write-intensive** → innecesario y costoso |
-
----
-
-### Límites importantes de DynamoDB a recordar
-
-```
-Tamaño máximo por ítem: 400 KB
-→ Nunca almacenes imágenes/archivos grandes directamente en DynamoDB
-→ Solución correcta: S3 para el objeto + DynamoDB para la referencia (URL)
-```
-
----
-
-### Regla mental para el examen
-
-> - **Imágenes/archivos grandes** → siempre en **S3**, nunca directamente en DynamoDB
-> - **Referencia/metadata de objetos S3** → **DynamoDB** (clave-valor rápido)
-> - **DAX** → solo justificado para sistemas **read-heavy**, no write-intensive
-> - **Keyspaces** → esquemas flexibles y alta velocidad, no simple clave-valor
-> - **Oracle en RDS** → costoso por licencias; migrar a servicios nativos AWS ahorra dinero
-   
-&nbsp;   
-
-&nbsp;   
-
-&nbsp;
-
-Esta es una pregunta conceptual directa. Aquí el resumen:
-
-### Respuesta: AWS Storage Gateway
-
-Es el servicio diseñado específicamente para **extender infraestructura on-premises hacia la nube AWS**, actuando como puente entre ambos entornos.
-
----
-
-### Por qué las otras opciones no aplican
-
-| Servicio | Propósito real |
-|---|---|
-| **Amazon EC2** | Servicio de **cómputo** (servidores virtuales), no storage |
-| **Amazon EBS** | Block storage **exclusivo para instancias EC2**, no extiende on-premises |
-| **Amazon SQS** | Servicio de **colas de mensajes**, sin relación con storage |
-| **AWS Storage Gateway** | ✅ Conecta on-premises con cloud storage de forma transparente |
-
----
-
-### Regla mental para el examen
-
-> - **Extender storage on-premises hacia AWS** → **AWS Storage Gateway**
-> - Los tres tipos de Gateway (File, Tape, Volume) cubren diferentes casos de uso, pero todos resuelven la integración híbrida on-premises ↔ AWS
-   
-&nbsp;   
-
-&nbsp;   
-
-&nbsp;
 
 ## Route 53 Geoproximity Routing: Control de Cobertura Geográfica
 
@@ -3590,130 +2204,6 @@ Geolocation Routing:
 
 &nbsp;
 
-## AWS DataSync + S3 Glacier Deep Archive: Migración de Datos Históricos
-
-### El problema del escenario
-
-```
-On-premises storage casi lleno
-├── Datos activos → deben quedarse on-premises
-└── Datos históricos (cold data) → mover a AWS
-                                   para liberar espacio
-```
-
----
-
-### La solución correcta: DataSync → S3 Glacier Deep Archive directo
-
-```
-On-premises (datos históricos)
-         ↓
-AWS DataSync
-├── Velocidad hasta 10x mayor que herramientas open-source
-├── Maneja scripting, scheduling, monitoreo automáticamente
-├── Sin modificar aplicaciones existentes
-└── Transferencia directa a Glacier Deep Archive ✅
-         ↓
-S3 Glacier Deep Archive (costo mínimo para archivado)
-```
-
----
-
-### Por qué las otras opciones son incorrectas
-
-| Opción | Problema específico |
-|---|---|
-| **Storage Gateway → Glacier Deep Archive** | Storage Gateway está diseñado para **acceso híbrido continuo con caché**, no para migración masiva de datos históricos |
-| **Storage Gateway → Glacier → lifecycle a Deep Archive** | Mismo problema + pasos innecesarios adicionales |
-| **DataSync → S3 Standard → lifecycle → Glacier Deep Archive (30 días)** | DataSync puede ir **directamente** a Glacier Deep Archive. No necesitas S3 Standard + esperar 30 días |
-
----
-
-### DataSync vs Storage Gateway: distinción clave
-
-```
-AWS DataSync                     AWS Storage Gateway
-────────────                     ───────────────────
-Migración/transferencia          Integración híbrida continua
-masiva de datos                  on-premises ↔ AWS
-One-time o periódica             Acceso permanente con caché local
-Hasta 10x más rápido             Optimiza cambios incrementales
-Para mover datos fríos/históricos Para acceder datos activos en nube
-```
-
----
-
-### Regla mental para el examen
-
-> - **Mover datos históricos/fríos de on-premises a AWS** → **AWS DataSync**
-> - **Acceso híbrido continuo con caché local** → **AWS Storage Gateway**
-> - **Archivado de largo plazo más económico en S3** → **S3 Glacier Deep Archive**
-> - DataSync puede escribir **directamente** en Glacier Deep Archive sin pasar por S3 Standard
-   
-&nbsp;   
-
-&nbsp;   
-
-&nbsp;
-
-## Route 53 Failover: Active-Active vs Active-Passive
-
-### La distinción fundamental
-
-```
-Active-Active Failover           Active-Passive Failover
-─────────────────────            ───────────────────────
-TODOS los recursos activos       Recursos PRIMARIOS activos
-simultáneamente                  Recursos SECUNDARIOS en standby
-                                 
-Route 53 responde con            Route 53 responde solo con
-cualquier recurso saludable      recursos primarios saludables
-                                 Si todos fallan → usa secundarios
-Política: Weighted, Latency,     Política: Failover (routing policy)
-Geolocation, etc.
-```
-
----
-
-### ¿Por qué Active-Active con Weighted policy es correcto?
-
-El escenario requiere que **todos los recursos estén disponibles todo el tiempo**:
-
-```
-Región us-east-1 (activa)  ──┐
-Región eu-west-1 (activa)  ──┼──→ Route 53 (Weighted) → distribuye tráfico
-Región ap-northeast-1(activa)┘     entre todos los saludables
-
-Si una región falla → Route 53 detecta el health check fallido
-                   → excluye esa región automáticamente
-                   → tráfico continúa a las regiones saludables ✅
-```
-
----
-
-### Por qué las otras opciones son incorrectas
-
-| Opción | Por qué falla |
-|---|---|
-| **Active-Passive con Weighted Records** | Active-Passive tiene primarios y secundarios. El requisito es que TODOS estén activos siempre |
-| **Active-Passive con múltiples primarios y secundarios** | Mismo problema: hay recursos en standby, no todos activos simultáneamente |
-| **Active-Active con un primario y un secundario** | Concepto inválido: Active-Active no tiene primarios ni secundarios. Todos son iguales |
-
----
-
-### Regla mental para el examen
-
-> - **"Todos los recursos disponibles todo el tiempo"** → **Active-Active Failover**
-> - **"Recurso primario con backup en standby"** → **Active-Passive Failover**
-> - Active-Active usa: Weighted, Latency, Geolocation (cualquier política excepto Failover)
-> - Active-Passive usa: **Failover routing policy** específicamente
-> - En Active-Active **no existen** conceptos de "primario" y "secundario"
-   
-&nbsp;   
-
-&nbsp;   
-
-&nbsp;
 
 ## Elastic IP + Network Load Balancer: IPs Estáticas para Whitelist
 
@@ -3778,6 +2268,7 @@ EC2 instances (backend)
 &nbsp;   
 
 &nbsp;
+
 
 ## ElastiCache Memcached + Auto Discovery: Gestión Distribuida de Sesiones
 
@@ -3849,131 +2340,6 @@ Con Auto Discovery:
 
 &nbsp;
 
-## CloudFront Origin Groups: Alta Disponibilidad con Failover
-
-### ¿Qué es un Origin Group en CloudFront?
-
-```
-Origin Group
-├── Origen Primario  → recibe tráfico normal
-└── Origen Secundario → CloudFront cambia automáticamente
-                        si el primario falla o devuelve
-                        códigos HTTP de error específicos
-
-Requisito: mínimo DOS orígenes para configurar origin failover
-```
-
----
-
-### La solución correcta
-
-```
-AZ-A                    AZ-B
-┌──────────┐           ┌──────────┐
-│ EC2 #1   │           │ EC2 #2   │
-│(primario)│           │(secundario)│
-└──────────┘           └──────────┘
-      └───────────────────┘
-              ↑
-        Origin Group
-              ↑
-         CloudFront
-         (distribución global)
-```
-
-Si EC2 #1 (AZ-A) falla → CloudFront automáticamente usa EC2 #2 (AZ-B) ✅
-
----
-
-### Por qué las otras opciones fallan
-
-| Opción | Error específico |
-|---|---|
-| **S3 para contenido dinámico** | S3 solo sirve **contenido estático**. El contenido dinámico requiere EC2 u otro servidor de aplicaciones |
-| **Auto Scaling Group como origen** | No puedes usar un ASG directamente como origen en CloudFront. Además necesitas **al menos 2 orígenes** para origin failover |
-| **Lambda@Edge en origin group** | Lambda@Edge no puede configurarse como parte de un origin group en CloudFront |
-
----
-
-### Regla mental para el examen
-
-> - **Alta disponibilidad en CloudFront** → **Origin Group con 2+ orígenes en diferentes AZs**
-> - **Origen primario falla** → CloudFront automáticamente usa el **origen secundario**
-> - **S3 como origen** → solo para contenido estático
-> - **EC2 como origen** → para contenido dinámico
-> - Origin failover requiere **mínimo 2 orígenes** configurados en el grupo
-   
-&nbsp;   
-
-&nbsp;   
-
-&nbsp;
-
-## Fault Tolerance Multi-AZ: Cálculo del Número Óptimo de Instancias
-
-### La fórmula clave
-
-```
-Requisito: mínimo N instancias funcionando INCLUSO si una AZ falla
-Número de AZs: Z
-
-Instancias por AZ = N / (Z - 1)
-
-→ N=6, Z=3: 6 / (3-1) = 6/2 = 3 instancias por AZ
-```
-
----
-
-### Verificación de la solución correcta
-
-```
-3 instancias en eu-west-1a
-3 instancias en eu-west-1b
-3 instancias en eu-west-1c
-Total: 9 instancias
-
-Si eu-west-1a falla:
-eu-west-1b (3) + eu-west-1c (3) = 6 instancias ✅ mínimo cumplido
-```
-
----
-
-### Análisis de todas las opciones
-
-| Distribución | Total | Si una AZ falla | ¿Cumple? | Costo |
-|---|---|---|---|---|
-| 2+2+2 | 6 | 4 instancias | ❌ (necesita 6) | Más barato pero inválido |
-| **3+3+3** | **9** | **6 instancias** | **✅** | **Óptimo** |
-| 6+6+0 | 12 | 6 instancias | ✅ | Más costoso que 3+3+3 |
-| 6+6+6 | 18 | 12 instancias | ✅ | Más costoso, over-provisioned |
-
----
-
-### Fault Tolerance vs High Availability
-
-```
-High Availability                Fault Tolerance
-─────────────────                ───────────────
-Al menos 1 instancia             Mínimo N instancias
-funcionando                      funcionando siempre
-Sin degradación de servicio      Sin degradación de servicio
-requerida necesariamente         requerida ← más estricto
-```
-
----
-
-### Regla mental para el examen
-
-> Para fault tolerance con pérdida de **1 AZ** entre **Z AZs**:
-> **Instancias por AZ = Mínimo requerido ÷ (Z - 1)**
->
-> Ejemplo: 6 instancias mínimas, 3 AZs → 6÷2 = **3 por AZ** (9 total)
-   
-&nbsp;   
-
-&nbsp;   
-
-&nbsp;
 
 ## Lambda@Edge + Kinesis: Procesamiento de Streaming en Tiempo Real
 
@@ -4041,114 +2407,6 @@ No reduce latencia de proceso    Latencia mínima (cercano al usuario)
 
 &nbsp;
 
-## AWS Control Tower: Gobernanza Multi-Cuenta con Mínimo Esfuerzo
-
-### Los requisitos del escenario
-
-```
-1. Crear múltiples cuentas AWS dentro de una Organización
-2. Configuraciones preaprobadas por el equipo de seguridad
-3. Estandarizar baselines y configuraciones de red
-4. Mínimo esfuerzo de implementación
-```
-
----
-
-### La solución: AWS Control Tower Landing Zone
-
-```
-AWS Control Tower
-├── Landing Zone → entorno multi-cuenta bien arquitectado
-├── Account Factory → crea cuentas con configuraciones preaprobadas ✅
-├── Guardrails → políticas de gobernanza pre-empaquetadas
-│   ├── Preventivos (SCPs) → bloquean recursos no conformes
-│   └── Detectivos (AWS Config) → detectan no-conformidad
-└── Automatiza: CloudFormation + SCPs + AWS Config rules
-```
-
-**Tres formas de crear cuentas en Control Tower:**
-```
-1. Account Factory console (AWS Service Catalog)
-2. Enroll account feature
-3. Lambda + IAM roles (programático)
-```
-
----
-
-### Por qué las otras opciones fallan
-
-| Opción | Por qué es incorrecta |
-|---|---|
-| **AWS RAM** | Comparte **recursos existentes** entre cuentas. No crea cuentas nuevas ni estandariza configuraciones |
-| **AWS Config aggregator + conformance packs** | Config agrega datos de cumplimiento pero **no provisiona cuentas**. Los conformance packs son solo colecciones de reglas Config |
-| **Systems Manager OpsCenter + Security Hub** | OpsCenter gestiona **items operacionales** (tickets). No crea cuentas. Security Hub detecta hallazgos de seguridad, no estandariza configuraciones |
-
----
-
-### Mapa de servicios de gobernanza AWS
-
-```
-Crear y gobernar múltiples cuentas    → AWS Control Tower
-Políticas a nivel de organización     → AWS Organizations (SCPs)
-Detectar no-cumplimiento de recursos  → AWS Config
-Compartir recursos entre cuentas      → AWS Resource Access Manager
-Hallazgos de seguridad centralizados  → AWS Security Hub
-Gestionar operaciones/incidentes      → Systems Manager OpsCenter
-```
-
----
-
-### Regla mental para el examen
-
-> - **Crear cuentas con configuraciones estandarizadas + guardrails** → **AWS Control Tower**
-> - **Control Tower = Landing Zone + Account Factory + Guardrails**
-> - **AWS Config** → audita/detecta, no provisiona cuentas
-> - **AWS RAM** → comparte recursos, no crea cuentas
-> - Cuando el escenario menciona "múltiples cuentas + gobernanza + mínimo esfuerzo" → **Control Tower**
-   
-&nbsp;   
-
-&nbsp;   
-
-&nbsp;
-
-
-## Respuesta: Spot Instances
-
-Dos señales clave en el escenario indican Spot:
-
-```
-Señal 1: "Solo necesarias hasta reducir el backlog"
-→ Uso temporal, no permanente
-
-Señal 2: "Si el proceso se interrumpe, otro instance lo retoma"
-→ La aplicación tolera interrupciones ← característica clave para Spot
-```
-
----
-
-### Comparación de tipos de instancia
-
-| Tipo | Costo | Interrupción | Ideal para |
-|---|---|---|---|
-| **Spot** | Hasta 90% menos que On-Demand | Posible (2 min aviso) | Cargas tolerantes a fallos ✅ |
-| **On-Demand** | Precio estándar | No | Cargas variables sin compromiso |
-| **Reserved** | Descuento por contrato 1-3 años | No | Cargas predecibles y permanentes |
-| **Dedicated** | El más caro | No | Requisitos de compliance/licencias |
-
----
-
-### Regla mental para el examen
-
-> - **Temporal + tolerante a interrupciones + costo-efectivo** → **Spot Instances**
-> - Si el escenario menciona que la app puede **recuperarse de fallos** → Spot es la respuesta
-> - **Backlog temporal** = no necesitas Reserved (compromiso largo plazo)
-   
-&nbsp;   
-
-&nbsp;   
-
-&nbsp;
 
 ## Amazon Managed Prometheus + Managed Grafana: Monitoreo de Contenedores
 
@@ -4219,6 +2477,7 @@ Mayor overhead operacional       Mínimo overhead ✅
 
 &nbsp;
 
+
 ## SQS + ApproximateNumberOfMessages: Evitar Pérdida de Requests
 
 ### El problema del escenario
@@ -4276,91 +2535,6 @@ Ejemplo:
 > - SQS garantiza que los mensajes **no se pierdan** aunque las instancias estén ocupadas
 > - **EFA** → HPC/comunicación inter-nodos, no para request buffering
 > - **Aurora Serverless** → escala DB, nunca EC2
-   
-&nbsp;   
-
-&nbsp;   
-
-&nbsp;
-
-
-## Respuesta: AWS Storage Gateway → S3 Glacier Deep Archive
-
-**Decisión 1: ¿Qué servicio para la transición desde tape backup?**
-```
-Organización usa tape backup on-premises
-         ↓
-AWS Storage Gateway (Tape Gateway)
-├── Reemplaza cintas físicas por cintas virtuales en AWS
-├── Compatible con aplicaciones de backup existentes ✅
-├── Sin cambiar workflows actuales
-└── Cifra y comprime datos automáticamente
-```
-
-**Decisión 2: ¿Qué clase de storage para 10 años + acceso 1-2 veces/año?**
-```
-S3 Glacier Flexible Retrieval    S3 Glacier Deep Archive
-──────────────────────────       ───────────────────────
-Retención largo plazo            Retención muy largo plazo ✅
-Acceso en minutos/horas          Acceso en horas (12-48h)
-Más costoso                      Hasta 75% más barato ✅
-                                 Ideal para 10 años ✅
-```
-
----
-
-### Por qué las otras opciones fallan
-
-| Opción | Error |
-|---|---|
-| **Storage Gateway → Glacier Flexible Retrieval** | Válido pero más costoso que Deep Archive |
-| **Snowball Edge → Glacier Flexible Retrieval** | Snowball no integra directamente con Glacier. Además Flexible Retrieval es más caro |
-| **S3 + lifecycle → Glacier Flexible Retrieval** | Difícil integrar tape backup directamente con S3 sin Storage Gateway. Además Flexible Retrieval no es el más costo-efectivo |
-
----
-
-### Regla mental para el examen
-
-> - **Tape backup on-premises → AWS** → **Storage Gateway (Tape Gateway)**
-> - **Archivado 10+ años + mínimo costo** → **S3 Glacier Deep Archive**
-> - Acceso ocasional (1-2 veces/año) tolera tiempo de recuperación de horas → Deep Archive es suficiente
-   
-
-
-&nbsp;   
-
-&nbsp;   
-
-&nbsp;
-
-## Respuesta: AWS CloudTrail
-
-```
-AWS CloudTrail registra:
-├── Todas las llamadas API a recursos AWS ✅
-├── Acciones via consola, SDK, CLI y servicios AWS
-├── Quién hizo qué, cuándo y desde dónde
-└── Datos para auditoría y compliance ✅
-```
-
----
-
-### Por qué los otros servicios no aplican
-
-| Servicio | Propósito real |
-|---|---|
-| **Amazon CloudWatch** | Monitorea **métricas y logs** de rendimiento. No rastrea API calls específicas |
-| **AWS X-Ray** | **Debugging y tracing** de microservicios. No audita API calls de infraestructura |
-| **Redshift Spectrum** | **Feature de Redshift** para consultar datos en S3. No es un servicio de monitoreo |
-| **AWS CloudTrail** | ✅ Registra toda la actividad API en tu cuenta AWS |
-
----
-
-### Regla mental para el examen
-
-> - **Auditoría de API calls + compliance** → **AWS CloudTrail**
-> - **Métricas de rendimiento + alarmas** → **Amazon CloudWatch**
-> - **Debugging de microservicios + tracing** → **AWS X-Ray**
    
 &nbsp;   
 
@@ -4676,6 +2850,2695 @@ MergeShard      → reduce shards (dos shards → uno)
 
    
 &nbsp;   
+
+&nbsp;   
+
+&nbsp;
+---
+
+
+## NLB + DynamoDB: Juego Multijugador con UDP y Key-Value Store
+
+### La combinación correcta
+
+```
+Clientes del juego  →  Network Load Balancer (Layer 4)  →  EC2 / Servidores
+                                                         ↓
+                                                   Amazon DynamoDB
+                                                   (key-value store)
+```
+
+| Requisito | Servicio | Razón |
+|---|---|---|
+| Protocolo **UDP** (tráfico de juego) | **Network Load Balancer** | NLB opera en Layer 4 (OSI), soporta UDP. ALB solo opera en Layer 7 (HTTP/HTTPS) |
+| **Key-value store** para datos de usuarios | **Amazon DynamoDB** | DynamoDB soporta modelos de documento y key-value. Aurora/RDS son bases relacionales |
+
+---
+
+### ¿Por qué NLB y no ALB?
+
+```
+OSI Layer 7 (Application) → ALB → HTTP, HTTPS, gRPC
+OSI Layer 4 (Transport)   → NLB → TCP, UDP, TLS
+
+UDP = Layer 4 → solo NLB puede manejarlo
+```
+
+NLB con UDP usa un algoritmo de **flow hash** (protocolo + IP origen + puerto origen + IP destino + puerto destino) para enrutar consistentemente un flujo UDP siempre al mismo target durante su vida útil.
+
+---
+
+### Por qué las otras opciones fallan
+
+| Opción | Error |
+|---|---|
+| **ALB + DynamoDB** | ALB no soporta UDP (solo Layer 7) |
+| **NLB + Aurora** | Aurora es base de datos relacional, no key-value |
+| **ALB + RDS** | Doble error: ALB no soporta UDP + RDS no es key-value |
+
+---
+
+### Regla mental para el examen
+
+> - **UDP / Layer 4** → siempre **Network Load Balancer**
+> - **HTTP/HTTPS / Layer 7** → **Application Load Balancer**
+> - **Key-value store** → **DynamoDB**
+> - **Relacional** → RDS / Aurora
+
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
+
+## AWS Fargate + EKS + Kubernetes Cluster Autoscaler: Plataforma Bancaria Serverless
+
+### Los requisitos clave
+
+```
+1. Serverless (sin gestionar servidores EC2)
+2. Kubernetes (EKS, no ECS)
+3. Escalado automático del cluster
+```
+
+---
+
+### La solución: EKS + Fargate + Cluster Autoscaler
+
+```
+Carga de trabajo bancaria
+         ↓
+Amazon EKS (Kubernetes gestionado)
+         ↓ ejecuta pods en
+AWS Fargate (compute serverless)
+├── Sin provisionar EC2 ✅
+├── Aislamiento por tarea (cada pod en su propio kernel) ✅
+├── Paga solo por los recursos usados ✅
+         ↓
+Kubernetes Cluster Autoscaler
+├── Monitorea pods que no pueden schedularse
+├── Identifica nodos infrautilizados
+└── Ajusta el número de nodos automáticamente ✅
+```
+
+---
+
+### ECS vs EKS: distinción crítica
+
+```
+Amazon ECS                       Amazon EKS
+──────────                       ──────────
+Docker containers                Kubernetes containers
+API propia de AWS                Kubernetes estándar ✅
+Más simple                       Más flexible
+No usa kubectl                   Usa kubectl
+```
+
+> El escenario especifica **Kubernetes** → siempre **EKS**.
+
+---
+
+### Por qué las otras opciones fallan
+
+| Opción | Error |
+|---|---|
+| **ECS en Fargate** | ECS es para Docker, no Kubernetes. El escenario requiere Kubernetes |
+| **EMR Serverless + EBS** | EMR es para procesamiento de big data (Hadoop/Spark). No ejecuta clusters Kubernetes |
+| **EKS en Outposts + AppFlow** | Outposts = rack físico en data center on-premises → no es serverless. AppFlow integra SaaS, no gestiona pods Kubernetes |
+
+---
+
+### Regla mental para el examen
+
+> - **Kubernetes serverless en AWS** → **EKS + Fargate**
+> - **Docker sin Kubernetes** → **ECS + Fargate**
+> - **Escalar automáticamente el cluster Kubernetes** → **Kubernetes Cluster Autoscaler**
+> - **EMR** → siempre relacionado con big data (Spark, Hadoop, Hive), nunca con Kubernetes
+
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
+
+## FSx for Windows File Server: Sistema de Archivos .NET con Active Directory
+
+### Los requisitos del escenario
+
+```
+1. Sistema de archivos COMPARTIDO (no block storage)
+2. Integración con Microsoft Active Directory
+3. Alta velocidad: alto throughput + alto IOPS
+4. Aplicación .NET en EC2 Windows
+```
+
+---
+
+### Por qué FSx for Windows File Server
+
+```
+FSx for Windows File Server
+├── ✅ Protocolo SMB (estándar de Windows)
+├── ✅ Integración nativa con Microsoft Active Directory
+├── ✅ Escalabilidad: cientos de petabytes, decenas de GB/s, millones de IOPS
+├── ✅ Soporte DFS Namespaces (Distributed File System)
+└── ✅ Completamente gestionado por AWS
+```
+
+---
+
+### Comparación de opciones
+
+| Servicio | File System | AD Integration | Windows | IOPS/Throughput |
+|---|---|---|---|---|
+| **FSx for Windows File Server** | SMB ✅ | Nativo ✅ | ✅ | Alto ✅ |
+| **Amazon EFS** | NFS ✅ | ❌ | Solo Linux ❌ | ✅ |
+| **EBS Provisioned IOPS** | Block storage ❌ | ❌ | ✅ | ✅ |
+| **File Gateway** | SMB ✅ | ✅ | ✅ | Menor ⚠️ |
+
+---
+
+### Por qué las otras opciones fallan
+
+**❌ Amazon EFS**
+> EFS usa protocolo NFS y está optimizado para workloads Linux. No compatible con Windows de forma nativa.
+
+**❌ Amazon EBS Provisioned IOPS**
+> EBS es block storage de una sola instancia, no un sistema de archivos compartido. No tiene integración con AD.
+
+**❌ AWS Storage Gateway File Gateway**
+> Aunque soporta SMB y AD, su throughput e IOPS son significativamente menores que FSx for Windows, que puede alcanzar millones de IOPS.
+
+---
+
+### Regla mental para el examen
+
+> - **Windows + SMB + Active Directory + alto rendimiento** → **FSx for Windows File Server**
+> - **Linux + NFS** → **Amazon EFS**
+> - **Block storage de una instancia** → **EBS**
+> - **File Gateway** → cuando necesitas SMB on-premises con backup en S3, no para máximo rendimiento
+
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
+
+## NLB + Elastic IP: Whitelisting de IP para Clientes On-Premises
+
+### El problema del escenario
+
+```
+Clientes on-premises
+├── Solo permiten tráfico hacia IPs de confianza
+├── IPs whitelisted en sus firewalls corporativos
+└── ¿Cómo exponer la API en AWS con una IP fija?
+```
+
+---
+
+### La solución: Elastic IP asignada a Network Load Balancer
+
+```
+Clientes on-premises
+    ↓ (hacia IP fija whitelisted)
+Elastic IP Address
+    ↓ asociada a
+Network Load Balancer (Layer 4)
+    ↓
+EC2 instances (API backend)
+```
+
+**Puntos clave:**
+- **NLB** es el único load balancer al que puedes asignar una Elastic IP directamente
+- Permite usar la feature **BYOIP** (Bring Your Own IP) para mantener IPs ya whitelisted
+- Una IP fija y conocida → los clientes no necesitan actualizar sus firewalls
+
+---
+
+### Por qué no Application Load Balancer
+
+```
+Application Load Balancer
+├── ❌ No puedes asignarle un Elastic IP directamente
+├── Opera en Layer 7 (HTTP/HTTPS)
+└── Si necesitas EIP con ALB → pon un NLB delante del ALB
+```
+
+---
+
+### Por qué las otras opciones fallan
+
+| Opción | Por qué no aplica |
+|---|---|
+| **EIP en ALB** | Imposible. ALB no acepta Elastic IPs directamente |
+| **CloudFront con IPs privadas del servidor** | CloudFront no tiene IPs fijas estáticas asignables |
+| **Route 53 Alias hacia el ELB** | Un alias DNS no da una IP estática. Los clientes no pueden hacer whitelist de un hostname DNS |
+
+---
+
+### Regla mental para el examen
+
+> - **IP fija / Elastic IP en Load Balancer** → solo **Network Load Balancer**
+> - ALB → sin IP fija asignable
+> - **NLB delante de ALB** → patrón válido cuando necesitas EIP + funcionalidades Layer 7
+> - **BYOIP** → cuando los clientes ya tienen la IP whitelisted y no quieren cambiarla
+
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
+
+## Step Scaling: Ajustes por Pasos con CloudWatch
+
+### Los cuatro tipos de scaling policy en Auto Scaling
+
+| Política | Mecanismo | Cuándo usar |
+|---|---|---|
+| **Target Tracking** | Mantiene métrica en valor objetivo (como termostato) | Optimizar costos continuamente |
+| **Step Scaling** | Ajusta capacidad en pasos según el tamaño del breach de alarma | Múltiples umbrales con respuestas distintas |
+| **Simple Scaling** | Ajuste único cuando se dispara alarma. Debe esperar cooldown period | Casos básicos simples |
+| **Scheduled Scaling** | Basado en horario predefinido | Tráfico predecible |
+
+---
+
+### Qué hace Step Scaling exactamente
+
+El escenario pide: "especificar scaling metrics y threshold values para alarmas CloudWatch, con ajustes que varían según el tamaño del breach".
+
+```
+Step Scaling:
+Alarm breach pequeño (CPU 60-70%) → agregar 1 instancia
+Alarm breach mediano (CPU 70-85%) → agregar 2 instancias
+Alarm breach grande  (CPU >85%)   → agregar 4 instancias
+
+↑ Los "pasos" varían según la magnitud del problema
+```
+
+**Ventaja clave:** Step Scaling sigue respondiendo a alarmas incluso mientras una actividad de scaling está en progreso (sin cooldown period de bloqueo).
+
+---
+
+### Por qué las otras opciones fallan
+
+**❌ Target Tracking**
+> Target tracking mantiene un valor objetivo para una métrica. No especifica ajustes escalonados basados en el tamaño del breach.
+
+**❌ Simple Scaling**
+> Solo tiene un único ajuste, no múltiples pasos. Además debe esperar el cooldown period antes de responder a nuevas alarmas.
+
+**❌ Scheduled Scaling**
+> Se basa en horarios, no en métricas CloudWatch ni thresholds dinámicos.
+
+---
+
+### Regla mental para el examen
+
+> - **"Set of scaling adjustments" + "threshold values" + "CloudWatch alarms"** → **Step Scaling**
+> - **Mantener métrica en un valor objetivo** → **Target Tracking**
+> - **Tráfico predecible por horario** → **Scheduled Scaling**
+> - Si el requisito menciona "escalar proporcionalmente" a una métrica → **Target Tracking**
+> - Si el requisito menciona "ajustes que varían por tamaño del breach" → **Step Scaling**
+
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
+
+## AWS Transit Gateway: Hub Central para Cientos de VPCs Multi-Región
+
+### El problema del escenario
+
+```
+Problema actual:
+Cientos de VPCs + múltiples VPN connections + 5 regiones AWS
+├── VPC peering = N*(N-1)/2 conexiones punto a punto ❌
+├── VPN en cada VPC individualmente → operacionalmente costoso ❌
+└── Sin soporte inter-región centralizado ❌
+```
+
+---
+
+### La solución: Transit Gateway + Peering Inter-Región
+
+```
+Región us-east-1                    Región eu-west-1
+┌────────────────────┐              ┌────────────────────┐
+│  Transit Gateway   │──peering────→│  Transit Gateway   │
+│  ├── VPC-A         │              │  ├── VPC-X         │
+│  ├── VPC-B         │              │  ├── VPC-Y         │
+│  ├── VPC-C         │              │  └── VPC-Z         │
+│  └── VPN on-prem   │              └────────────────────┘
+└────────────────────┘
+```
+
+**Modelo hub-and-spoke:**
+- Cada VPC/VPN conecta una sola vez al Transit Gateway
+- El TGW hace de hub central para todo el routing
+- Nueva VPC → solo conecta al TGW → accede automáticamente a toda la red
+
+---
+
+### Attachments soportados por Transit Gateway
+
+```
+Transit Gateway puede conectar:
+├── Una o más VPCs
+├── Una o más conexiones VPN
+├── Uno o más AWS Direct Connect gateways
+└── Uno o más transit gateway peering connections
+         ↑ (el peering debe ser con un TGW en DIFERENTE región)
+```
+
+---
+
+### Por qué las otras opciones fallan
+
+| Opción | Error específico |
+|---|---|
+| **Direct Connect Gateway + LAG + virtual interface pública** | Solo se puede crear private virtual interface en Direct Connect Gateway (no pública). LAG agrega conexiones en un mismo endpoint, no resuelve la escala de cientos de VPCs |
+| **Inter-region VPC Peering** | Requiere configurar cada par individualmente. No centraliza nada, no soporta on-premises |
+| **VPN CloudHub + Direct Connect Gateway** | VPN CloudHub es solo para VPNs, no para VPCs. No resuelve la escala ni el inter-region peering centralizado |
+
+---
+
+### Regla mental para el examen
+
+> - **Cientos de VPCs + VPNs + multi-región + gateway único** → **AWS Transit Gateway**
+> - **Inter-region TGW** → peering entre TGWs en distintas regiones
+> - **Direct Connect virtual interface** → siempre privada hacia Direct Connect Gateway
+> - **VPN CloudHub** → solo VPNs, no VPCs, no multi-región centralizado
+
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
+
+## Storage Optimized Instances: Alto I/O Secuencial en Almacenamiento Local
+
+### Los tipos de instancias EC2 y sus workloads
+
+| Tipo | Optimizado para | Ejemplos de uso |
+|---|---|---|
+| **Storage Optimized** | Alto I/O secuencial de lectura/escritura en almacenamiento local | Data warehousing, Elasticsearch, Hadoop distribuido |
+| **Memory Optimized** | Procesar grandes datasets en memoria | In-memory databases (Redis, SAP HANA), real-time analytics |
+| **Compute Optimized** | Procesamiento con alta CPU | Batch processing, transcoding, gaming servers, HPC |
+| **General Purpose** | Balance de CPU, memoria y red | Aplicaciones web, desarrollo, small databases |
+
+---
+
+### Por qué Storage Optimized
+
+```
+Requisito del escenario:
+"High, sequential read and write access to very large data sets
+ on LOCAL storage"
+         ↓
+Storage Optimized Instances
+├── Decenas de miles de IOPS de baja latencia (random I/O)
+├── Alto throughput para acceso secuencial
+└── Almacenamiento local NVMe SSD (físicamente en el servidor)
+```
+
+---
+
+### La distinción clave: "en memoria" vs "en almacenamiento local"
+
+```
+Memory Optimized  → workload VIVE en RAM (en memoria)
+Storage Optimized → workload lee/escribe en disco LOCAL (I/O intensivo)
+
+"Large data sets in memory"              → Memory Optimized
+"Sequential read/write on local storage" → Storage Optimized
+```
+
+---
+
+### Regla mental para el examen
+
+> - **"High sequential read/write + local storage + large datasets"** → **Storage Optimized**
+> - **"Fast performance for workloads processing data IN MEMORY"** → **Memory Optimized**
+> - **"Compute-bound + high-performance processors + batch"** → **Compute Optimized**
+> - **"Balance compute/memory/networking"** → **General Purpose**
+
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
+
+## Lambda Container Image: Almacenamiento Efímero hasta 10 GB
+
+### El escenario
+
+```
+Requisitos:
+1. Docker image en Amazon ECR
+2. Fully managed serverless compute
+3. 5 GB de ephemeral storage para procesamiento temporal
+```
+
+---
+
+### Lambda con Container Image Support
+
+```
+Amazon ECR (Docker image)
+         ↓
+AWS Lambda (Container Image Support)
+├── ✅ Fully managed + serverless
+├── ✅ Sin servidores que provisionar
+├── ✅ Se escala automáticamente
+├── ✅ Paga solo por tiempo de cómputo
+└── ✅ Ephemeral storage configurable: 512 MB → 10 GB
+              ↑
+         Set storage = 5 GB → cumple el requisito
+```
+
+Lambda con container images puede ser de hasta 10 GB en tamaño, y el ephemeral storage en `/tmp` puede configurarse de 512 MB hasta 10 GB.
+
+---
+
+### Aclaración: Fargate vs Lambda en términos de "serverless"
+
+```
+AWS Lambda                       Amazon ECS/EKS con Fargate
+──────────                       ──────────────────────────
+100% serverless ✅               "Serverless" para containers
+Sin configurar clusters          Aún debes configurar:
+Sin task definitions             ├── ECS services
+Auto-escala por función          ├── Task definitions
+Max 15 min ejecución             ├── Clusters
+Max 10 GB storage                └── Scaling policies
+```
+
+> Cuando el escenario dice "fully managed serverless compute service" → Lambda es más serverless que Fargate.
+
+---
+
+### Por qué las otras opciones fallan
+
+| Opción | Error específico |
+|---|---|
+| **ECS Fargate** | No es fully serverless: aún debes gestionar ECS services, task definitions y clusters |
+| **Lambda + EFS** | EFS es persistente, no efímero. El escenario pide ephemeral storage, no almacenamiento persistente compartido |
+| **ECS EC2 worker nodes + EBS** | Usar EC2 worker nodes contradice el requisito de arquitectura serverless |
+
+---
+
+### Regla mental para el examen
+
+> - **Serverless + Docker image + ECR + ephemeral storage** → **Lambda con Container Image Support**
+> - **Lambda ephemeral storage** → configurable de 512 MB a **10 GB** (en `/tmp`)
+> - **EFS en Lambda** → para almacenamiento persistente entre invocaciones, no efímero
+> - **Fargate** → no es "fully serverless": necesita configuración de ECS/EKS
+
+&nbsp;   
+
+&nbsp;   
+
+---
+
+
+---
+
+# CSAA – Design Secure Architectures
+
+---
+
+
+## Seguridad de Variables de Entorno en AWS Lambda
+
+### ¿Cómo funciona el cifrado en Lambda por defecto?
+
+Cuando creas una función Lambda con variables de entorno, AWS **automáticamente las cifra** usando KMS. Pero hay un detalle importante:
+
+```
+Cifrado por defecto (KMS key por defecto)
+├── ✅ Los valores están cifrados en reposo
+└── ❌ Siguen siendo VISIBLES en texto plano en la consola Lambda
+         para cualquier usuario con acceso
+```
+
+Este es el problema central del escenario: **cifrado ≠ privacidad en la consola**.
+
+---
+
+### La solución: KMS key propia + Encryption Helpers
+
+Al crear tu propia KMS key y usar los **encryption helpers** de Lambda:
+
+```
+Tu KMS Key propia
+├── ✅ Datos cifrados en reposo
+├── ✅ Valores NO visibles en texto plano en la consola
+├── ✅ Tú controlas quién tiene acceso a la key
+├── ✅ Puedes rotar, deshabilitar y auditar la key
+└── ✅ Puedes definir controles de acceso granulares
+```
+
+---
+
+### Comparación de opciones
+
+| Opción | Veredicto | Razón |
+|---|---|---|
+| "Lambda ya cifra por defecto, no hay que hacer nada" | ❌ | El cifrado por defecto existe, pero los valores siguen visibles en la consola para otros usuarios |
+| "Crear una KMS key propia y usar encryption helpers" | ✅ | Máxima seguridad: cifrado real + acceso controlado + invisible en consola |
+| "Usar SSL con CloudHSM" | ❌ | SSL solo cifra datos **en tránsito**, no en reposo. Los valores seguirían visibles |
+| "Lambda no cifra, usar EC2" | ❌ | Falso. Lambda sí cifra variables de entorno |
+
+---
+
+### La distinción clave que evalúa este examen
+
+```
+Cifrado por defecto (default KMS key)
+│
+├── Protege los datos en disco ✅
+└── Pero cualquier usuario con acceso a la consola
+    puede VER los valores → No es suficiente ❌
+
+Cifrado con KMS key propia + Encryption Helpers
+│
+├── Protege los datos en disco ✅
+└── Los valores aparecen CIFRADOS incluso en la consola ✅
+    Solo quien tenga permiso sobre esa KMS key puede descifrarlos
+```
+
+---
+
+### Regla mental para el examen
+
+> Cuando el requisito sea **máxima seguridad** para variables sensibles en Lambda → siempre elige **KMS key propia + encryption helpers**, no la key por defecto.
+
+La key por defecto es conveniente, pero la key propia te da **control total**: crear, rotar, deshabilitar, auditar y restringir acceso.
+
+&nbsp;
+
+
+&nbsp;
+
+
+&nbsp;
+
+
+## Amazon Macie: Protección de Datos Sensibles en S3
+
+### ¿Qué es Amazon Macie?
+
+Es un servicio de seguridad **impulsado por Machine Learning** que automáticamente:
+- **Descubre** datos sensibles en S3
+- **Clasifica** la información (PII, propiedad intelectual, etc.)
+- **Monitorea** políticas de privacidad y seguridad en buckets
+- **Alerta** sobre violaciones potenciales
+
+---
+
+### Los dos tipos de hallazgos (findings) que genera Macie
+
+```
+Policy Findings                     Sensitive Data Findings
+───────────────                     ───────────────────────
+Violaciones de política             Datos sensibles encontrados
+Problemas de seguridad/privacidad   en objetos S3 específicos
+en buckets S3                       
+Monitoreo continuo y automático     Requiere configurar un
+                                    "sensitive data discovery job"
+```
+
+Ambos requisitos del escenario están cubiertos:
+- ✅ Verificar datos con PII → **Sensitive Data Findings**
+- ✅ Alertar sobre violaciones de privacidad → **Policy Findings**
+
+---
+
+### Los otros servicios y por qué no aplican
+
+| Servicio | Para qué sirve realmente | ¿Aplica al escenario? |
+|---|---|---|
+| **Amazon Polly** | Convierte texto en voz (text-to-speech) | ❌ No tiene relación con seguridad |
+| **Amazon Kendra** | Búsqueda empresarial con IA | ❌ Busca contenido, no monitorea seguridad |
+| **Amazon Fraud Detector** | Detecta fraudes en transacciones online | ❌ No analiza PII en S3 |
+| **Amazon Macie** | Descubre y protege datos sensibles en S3 | ✅ Exactamente esto |
+
+---
+
+### Regla mental para el examen
+
+> Siempre que veas estas palabras juntas en una pregunta → piensa en **Macie**:
+> - PII (Personally Identifiable Information)
+> - Datos sensibles en S3
+> - Compliance / políticas de privacidad
+> - Clasificación automática de datos
+> - Alertas de seguridad sobre buckets S3
+
+ &nbsp;   
+ 
+ &nbsp;   
+ 
+ &nbsp;
+
+
+## Security Groups: Acceso SSH desde una IP específica
+
+### La respuesta correcta y por qué
+
+```
+Inbound Rule:
+├── Protocol: TCP      ← SSH usa TCP, no UDP
+├── Port: 22           ← Puerto estándar de SSH
+└── Source: 110.238.98.71/32  ← /32 = exactamente una IP
+```
+
+---
+
+### Los 4 conceptos que evalúa esta pregunta
+
+**1. Inbound vs Outbound**
+```
+Inbound  → tráfico que ENTRA a la instancia  ← necesario para SSH
+Outbound → tráfico que SALE de la instancia
+```
+Alguien se conecta *hacia* tu instancia por SSH → regla **Inbound**.
+
+**2. TCP vs UDP**
+```
+SSH  → TCP puerto 22  ✅
+DNS  → UDP puerto 53
+RDP  → TCP puerto 3389
+```
+SSH siempre usa **TCP**. Especificar UDP simplemente no funcionaría.
+
+**3. Notación CIDR /32**
+```
+/32  → 1 IP exacta        (110.238.98.71/32)     ← aquí
+/24  → 256 IPs            (110.238.98.0/24)
+/16  → 65,536 IPs         (110.238.0.0/16)
+/0   → Todas las IPs      (0.0.0.0/0)
+```
+
+**4. Security Groups son stateful**
+> Como los Security Groups son **stateful**, el tráfico de retorno (respuesta SSH) se permite automáticamente, sin necesidad de una regla Outbound explícita.
+
+---
+
+### Por qué cada opción incorrecta falla
+
+| Opción | Error |
+|---|---|
+| Inbound, **UDP**, port 22, /32 | SSH usa TCP, no UDP |
+| **Outbound**, TCP, port 22, /32 | Dirección incorrecta; SSH entrante necesita regla Inbound |
+| **Outbound**, UDP, port 22, 0.0.0.0/0 | Dos errores: Outbound + UDP + abre a todas las IPs |
+
+---
+
+### Regla mental para el examen
+
+> SSH → siempre **Inbound + TCP + puerto 22 + /32** para una IP específica
+  
+ &nbsp;   
+ 
+ &nbsp;   
+ 
+ &nbsp;
+
+
+## CloudFront Signed Cookies vs Signed URLs: Control de Acceso Privado
+
+### La decisión clave del escenario
+
+Dos requisitos determinan la solución:
+1. Acceso a **múltiples archivos** privados
+2. **Sin cambiar las URLs** actuales
+
+---
+
+### Signed URLs vs Signed Cookies: cuándo usar cada uno
+
+```
+Signed URLs                      Signed Cookies
+───────────                      ──────────────
+Acceso a UN archivo individual   Acceso a MÚLTIPLES archivos ✅
+Cambia la URL del recurso        NO cambia las URLs actuales ✅
+Útil para descargas únicas       Ideal para áreas de suscriptores
+Soporta distribuciones RTMP      No soporta RTMP
+Para clientes sin soporte        Para navegadores estándar
+de cookies
+```
+
+> El escenario necesita **múltiples archivos + sin cambiar URLs** → **Signed Cookies** ✅
+
+---
+
+### ¿Cómo funcionan los Signed Cookies?
+
+```
+1. Usuario paga suscripción
+         ↓
+2. Aplicación verifica membresía
+         ↓
+3. App envía Set-Cookie headers al navegador
+         ↓
+4. Navegador incluye cookie en cada request a CloudFront
+         ↓
+5. CloudFront valida la cookie → permite acceso a contenido privado
+         ↓
+6. Las URLs del contenido NO cambian ✅
+```
+
+---
+
+### Por qué las otras opciones fallan
+
+| Opción | Por qué es incorrecta |
+|---|---|
+| **Match Viewer** | Es una *Origin Protocol Policy* que decide si CloudFront usa HTTP o HTTPS para hablar con el origen. No controla acceso de usuarios |
+| **Signed URL** | Acceso a archivos individuales + **cambia las URLs** → viola el segundo requisito |
+| **Field-Level Encryption** | Protege datos sensibles que los **usuarios suben** al servidor (upload). No controla acceso a descargas de contenido privado |
+
+---
+
+### Regla mental para el examen
+
+| Situación | Solución |
+|---|---|
+| Acceso a **un archivo** específico | Signed URL |
+| Acceso a **múltiples archivos** / área de suscriptores | Signed Cookies |
+| **Sin cambiar URLs** actuales | Signed Cookies |
+| Cliente **sin soporte de cookies** | Signed URL |
+| Distribución **RTMP** | Signed URL (Signed Cookies no lo soporta) |
+   
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
+
+## Egress-Only Internet Gateway + AWS Network Firewall: Seguridad IPv6
+
+### Los tres requisitos del escenario
+
+1. **Solo tráfico saliente** IPv6 hacia internet
+2. **Bloquear conexiones entrantes** iniciadas desde internet
+3. **Inspección y filtrado** de tráfico
+
+---
+
+### ¿Por qué Egress-Only Internet Gateway?
+
+IPv6 tiene una característica importante que lo diferencia de IPv4:
+
+```
+IPv4                             IPv6
+────                             ────
+IPs privadas por defecto         IPs públicas por defecto
+NAT Gateway para salir           Egress-Only IGW para salir
+  a internet de forma segura       a internet de forma segura
+```
+
+Como las IPs IPv6 son públicas por defecto, necesitas un componente que permita **salir pero no entrar**:
+
+```
+Egress-Only Internet Gateway
+├── ✅ Permite tráfico IPv6 SALIENTE (instancia → internet)
+├── ✅ BLOQUEA conexiones IPv6 ENTRANTES (internet → instancia)
+├── ✅ Altamente disponible y escalable
+└── ✅ Exclusivo para IPv6
+```
+
+---
+
+### La solución completa
+
+```
+Internet
+   ↕ (solo salida)
+Egress-Only IGW
+   ↕
+AWS Network Firewall  ← inspección + filtrado
+   ↕
+Private Subnet
+   └── EC2 Instance
+```
+
+---
+
+### Por qué las otras opciones fallan
+
+| Opción | Componente de red | Problema | Componente de seguridad | Problema |
+|---|---|---|---|---|
+| Public subnet + **Internet Gateway** | IGW permite tráfico bidireccional | ❌ No bloquea inbound IPv6 | **Traffic Mirroring** | ❌ Solo copia tráfico para análisis, no filtra |
+| Private subnet + **PrivateLink** | Conecta a servicios AWS, no a internet | ❌ No maneja IPv6 público | **GuardDuty** | ❌ Detecta amenazas, no inspecciona/filtra tráfico |
+| Private subnet + **NAT Gateway** | NAT64 traduce IPv6→IPv4 | ❌ No bloquea inbound IPv6 | **Firewall Manager** | ❌ Gestiona políticas de firewall, no inspecciona tráfico |
+
+---
+
+### Distinción entre servicios de seguridad de red
+
+```
+AWS Network Firewall    → Inspección + filtrado activo de tráfico ✅
+AWS Firewall Manager    → Gestión centralizada de políticas (no inspecciona)
+Amazon GuardDuty        → Detección de amenazas con ML (no filtra tráfico)
+Traffic Mirroring       → Copia tráfico para análisis externo (no filtra)
+```
+
+---
+
+### Regla mental para el examen
+
+> - **Solo salida IPv6** (bloquear inbound) → **Egress-Only Internet Gateway**
+> - **Solo salida IPv4** (instancias privadas) → **NAT Gateway**
+> - **Entrada y salida** → **Internet Gateway** (público)
+> - **Inspección + filtrado de tráfico en VPC** → **AWS Network Firewall**
+   
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
+
+## Cifrado de Secrets en EKS: etcd Key-Value Store
+
+### El problema central
+
+En Amazon EKS, los secrets de Kubernetes (contraseñas, API keys, etc.) se almacenan en **etcd**, un almacén distribuido clave-valor. Por defecto, **estos secrets NO están cifrados**, lo que representa un riesgo de seguridad.
+
+---
+
+### La solución: Secret Encryption con KMS en EKS
+
+```
+Sin cifrado (default):
+Kubernetes Secret → etcd → texto plano ❌
+
+Con KMS encryption habilitado:
+Kubernetes Secret → KMS cifra → etcd → datos cifrados en reposo ✅
+```
+
+El proceso:
+1. Crear una **KMS key** específica para el cluster EKS
+2. Configurar el cluster para **cifrar secrets antes de guardarlos** en etcd
+3. Todo el contenido sensible en etcd queda cifrado en reposo
+
+---
+
+### Por qué las otras opciones no resuelven el problema
+
+| Opción | Qué hace realmente | Por qué no aplica |
+|---|---|---|
+| **AWS Secrets Manager + KMS** | Gestiona y recupera secrets externamente | No cifra datos **dentro de etcd**. Es para acceder a secrets, no para proteger el almacén interno de Kubernetes |
+| **EBS Volume Encryption** | Cifra los volúmenes de los worker nodes | Los worker nodes ≠ etcd. EBS no almacena la configuración interna del cluster |
+| **EBS CSI Driver** | Proporciona storage persistente para pods | Almacenamiento para aplicaciones, no para el etcd del control plane |
+
+---
+
+### La distinción clave: etcd vs otras capas de storage
+
+```
+EKS Cluster
+├── Control Plane
+│   └── etcd ← aquí viven los Kubernetes Secrets
+│              ← ESTO necesita KMS encryption
+│
+└── Worker Nodes
+    └── EBS Volumes ← storage de aplicaciones/pods
+                      (EBS encryption es diferente)
+```
+
+---
+
+### Secrets Manager vs KMS encryption en EKS
+
+```
+AWS Secrets Manager          KMS Secret Encryption en EKS
+───────────────────          ────────────────────────────
+Almacén externo de secrets   Cifra el almacén interno (etcd)
+Apps recuperan secrets vía   Transparente para las apps
+API de Secrets Manager       
+Rotación automática          Control criptográfico directo
+Útil para secrets de apps    Necesario para compliance de etcd
+```
+
+---
+
+### Regla mental para el examen
+
+> - Cifrar **secrets dentro de etcd en EKS** → **KMS secret encryption en el cluster EKS**
+> - Gestionar secrets que las **apps consumen** → **AWS Secrets Manager**
+> - Cifrar **discos de worker nodes** → **EBS encryption**
+> - Storage **persistente para pods** → **EBS CSI Driver**
+   
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
+
+## AWS Shield Advanced: Protección contra DDoS
+
+### Los niveles de protección DDoS en AWS
+
+```
+AWS Shield Standard (gratuito, automático)
+├── Protección básica contra ataques comunes
+├── Capa de red y transporte (L3/L4)
+└── Incluido automáticamente para todos los clientes
+
+AWS Shield Advanced (de pago, suscripción)
+├── Todo lo de Standard +
+├── Detección y mitigación de ataques sofisticados y grandes
+├── Visibilidad en tiempo real de los ataques
+├── Integración con AWS WAF
+├── Acceso 24/7 al DDoS Response Team (DRT)
+└── Protección contra cargos extra por spikes de DDoS en EC2/ELB/CloudFront/Route 53
+```
+
+---
+
+### Por qué las otras opciones son insuficientes
+
+| Opción | Propósito real | ¿Protege contra DDoS? |
+|---|---|---|
+| **AWS Firewall Manager** | Administración centralizada de WAF en múltiples cuentas | ❌ No mitiga DDoS directamente |
+| **AWS WAF** | Filtra tráfico HTTP (SQL injection, XSS, patrones maliciosos) | ⚠️ Parcial, no suficiente para DDoS volumétrico |
+| **Security Groups + NACLs** | Control de acceso a nivel de instancia/subnet | ⚠️ Útil pero insuficiente ante ataques masivos |
+| **AWS Shield Advanced** | Detección y mitigación específica de DDoS | ✅ Solución diseñada exactamente para esto |
+
+---
+
+### Los servicios protegidos por Shield Advanced
+
+```
+AWS Shield Advanced protege:
+├── Amazon EC2
+├── Elastic Load Balancing (ELB)
+├── Amazon CloudFront
+└── Amazon Route 53
+```
+
+---
+
+### Regla mental para el examen
+
+> - **DDoS** → **AWS Shield** (Standard gratuito, Advanced para ataques sofisticados)
+> - **SQL injection, XSS, tráfico HTTP malicioso** → **AWS WAF**
+> - **Gestión centralizada de WAF en múltiples cuentas** → **AWS Firewall Manager**
+> - **Inspección y filtrado de tráfico en VPC** → **AWS Network Firewall**
+> - **Control de acceso a instancias/subnets** → **Security Groups + NACLs**
+   
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
+
+## S3 Pre-Signed URLs: Control de Acceso a Contenido Privado
+
+### El problema
+
+Las fotos en S3 son **públicamente accesibles**, permitiendo que otros sitios las enlacen directamente (*hotlinking*). Esto consume el ancho de banda del propietario sin beneficio económico.
+
+---
+
+### La solución: Pre-Signed URLs con expiración
+
+```
+Antes (problemático):
+Bucket S3 público → cualquiera enlaza las fotos directamente ❌
+
+Después (solución):
+Bucket S3 privado → nadie accede directamente
+      ↓
+Aplicación genera Pre-Signed URL con expiración
+      ↓
+URL válida solo por tiempo limitado (ej: 1 hora)
+      ↓
+Solo el usuario autorizado puede acceder ✅
+```
+
+**Cómo funciona una Pre-Signed URL:**
+```
+Requiere al generarla:
+├── Credenciales de seguridad del propietario
+├── Nombre del bucket
+├── Object key
+├── Método HTTP (GET para descarga)
+└── Fecha/hora de expiración
+```
+
+---
+
+### Por qué las otras opciones no son efectivas
+
+| Opción | Por qué falla |
+|---|---|
+| **Bloquear IPs con NACL** | Los sitios ofensores pueden cambiar su IP fácilmente, eludiendo el bloqueo |
+| **CloudFront** | Es una CDN que acelera la entrega de contenido, no restringe quién puede acceder |
+| **Amazon WorkDocs** | Herramienta de colaboración de documentos, no diseñada para servir contenido estático web |
+
+---
+
+### Pre-Signed URLs vs Signed Cookies (recordando tema anterior)
+
+```
+Pre-Signed URLs (S3)             Signed Cookies (CloudFront)
+────────────────────             ───────────────────────────
+Control de acceso en S3          Control de acceso en CloudFront
+Por objeto individual            Múltiples archivos a la vez
+Sin cambiar URLs base            Sin cambiar URLs actuales
+Tiempo de expiración configurable Tiempo de expiración configurable
+```
+
+---
+
+### Regla mental para el examen
+
+> - **Hotlinking / uso no autorizado** de objetos S3 → **quitar acceso público + Pre-Signed URLs**
+> - **Pre-Signed URL** → acceso temporal y controlado a objetos S3 privados
+> - **Bloquear IPs** → ineficiente, fácilmente eludible
+> - **CloudFront** → velocidad de entrega, no control de acceso por sí solo
+   
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
+
+## Análisis de IAM Policy: Lectura de Permisos JSON
+
+### Desglose de la política
+
+```json
+Statement 1:
+{
+  "Effect": "Allow",
+  "Action": ["s3:Get*", "s3:List*"],
+  "Resource": "*"          ← TODOS los buckets
+}
+
+Statement 2:
+{
+  "Effect": "Allow",
+  "Action": "s3:PutObject",
+  "Resource": "arn:aws:s3:::boracay/*"  ← SOLO bucket boracay
+}
+```
+
+---
+
+### Mapa completo de permisos
+
+| Acción | ¿En qué recursos? | ¿Permitido? |
+|---|---|---|
+| `s3:Get*` (leer objetos) | **Todos** los buckets | ✅ |
+| `s3:List*` (listar objetos) | **Todos** los buckets | ✅ |
+| `s3:PutObject` (escribir) | Solo bucket **boracay** | ✅ |
+| `s3:DeleteObject` (eliminar) | Ninguno | ❌ No está en la policy |
+| `s3:PutBucketAcl` (cambiar permisos) | Ninguno | ❌ No está en la policy |
+
+---
+
+### Las tres respuestas correctas explicadas
+
+**✅ Leer objetos de TODOS los buckets**
+> `s3:Get*` con `Resource: "*"` → aplica a cualquier bucket de la cuenta
+
+**✅ Escribir objetos en el bucket `boracay`**
+> `s3:PutObject` con `Resource: "arn:aws:s3:::boracay/*"` → solo en boracay
+
+**✅ Leer objetos del bucket `boracay`**
+> Incluido en el primer statement (`s3:Get*` aplica a todos, incluyendo boracay)
+
+---
+
+### Por qué las otras opciones son incorrectas
+
+**❌ "Puede cambiar permisos del bucket boracay"**
+> Cambiar permisos requeriría `s3:PutBucketPolicy` o `s3:PutBucketAcl`. Ninguno está en la policy.
+
+**❌ "Puede leer pero NO listar objetos en boracay"**
+> Falso. `s3:List*` en `Resource: "*"` permite listar **todos** los buckets, incluyendo boracay.
+
+**❌ "Puede leer Y eliminar objetos de boracay"**
+> Puede leer ✅, pero eliminar requeriría `s3:DeleteObject`, que **no aparece** en ningún statement.
+
+---
+
+### Regla mental para el examen
+
+> Al analizar una IAM policy, verifica siempre:
+> 1. ¿Qué **acciones** están permitidas? (`Action`)
+> 2. ¿En qué **recursos** aplican? (`Resource: "*"` vs ARN específico)
+> 3. ¿El efecto es **Allow o Deny**?
+> 4. Si una acción **no aparece** en la policy → está **denegada por defecto**
+   
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
+
+## Redis AUTH en ElastiCache: Autenticación con Contraseña
+
+### Los requisitos del escenario
+
+- Autenticación con **contraseña** antes de ejecutar comandos Redis
+- Soporte para comandos específicos como `MULTI EXEC`
+- **Credenciales de larga duración** (long-lived credentials)
+- Seguridad robusta
+
+---
+
+### La solución: Redis AUTH + Transit Encryption
+
+```
+Cliente → --transit-encryption-enabled → Canal cifrado (TLS)
+                                              ↓
+                                    --auth-token (contraseña)
+                                              ↓
+                                    Redis valida contraseña
+                                              ↓
+                                    Acceso permitido a comandos
+                                    (incluyendo MULTI EXEC) ✅
+```
+
+Los dos parámetros son **complementarios y necesarios juntos**:
+
+| Parámetro | Función |
+|---|---|
+| `--transit-encryption-enabled` | Cifra la comunicación cliente-Redis (TLS) |
+| `--auth-token` | Requiere contraseña para ejecutar comandos |
+
+> ⚠️ Redis AUTH **requiere** que el transit encryption esté habilitado. No puede usarse sin TLS.
+
+---
+
+### Por qué las otras opciones fallan
+
+| Opción | Por qué es incorrecta |
+|---|---|
+| **AtRestEncryptionEnabled** | Cifra datos **en reposo** dentro del almacén en memoria. No protege la autenticación ni el acceso a comandos |
+| **Solo transit encryption** | Cifra el canal pero **no requiere contraseña**. Falta el `--auth-token` |
+| **IAM authentication token** | IAM no soporta comandos Redis como `MULTI EXEC`. Además, los tokens IAM **expiran cada 12 horas** → no son long-lived credentials ❌ |
+
+---
+
+### Comparación de cifrado en ElastiCache Redis
+
+```
+At-Rest Encryption          In-Transit Encryption        Redis AUTH
+──────────────────          ─────────────────────        ──────────
+Protege datos en disco      Protege datos en tránsito    Requiere contraseña
+y en memoria                (canal TLS)                  para ejecutar comandos
+AtRestEncryptionEnabled     transit-encryption-enabled   --auth-token
+No requiere autenticación   No requiere autenticación    Long-lived credentials ✅
+```
+
+---
+
+### Regla mental para el examen
+
+> - **Autenticación con contraseña en Redis** → **Redis AUTH** (`--auth-token`)
+> - Redis AUTH **siempre** requiere `--transit-encryption-enabled`
+> - **Cifrado de datos en reposo** en ElastiCache → `AtRestEncryptionEnabled`
+> - **IAM tokens** → expiran en 12h, no sirven para credenciales de larga duración en Redis
+> - `MULTI EXEC` = transacción Redis → requiere Redis AUTH, no IAM
+   
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
+
+## Identity Federation con AD Connector + IAM Roles
+
+### Los requisitos del escenario
+
+```
+1. Acceso a AWS Console para developers
+2. Identity federation (usar identidades existentes, no crear nuevas en AWS)
+3. Role-based access control
+4. Roles ya asignados via grupos en Active Directory corporativo
+```
+
+---
+
+### La solución: AD Connector + IAM Roles
+
+```
+Corporate Active Directory (on-premises)
+├── Grupos con roles ya definidos
+└── Usuarios de developers
+         ↓
+AWS Directory Service AD Connector
+(gateway que redirige requests al AD corporativo)
+         ↓
+IAM Roles (asignados a usuarios/grupos del AD)
+         ↓
+Acceso a AWS Console ✅
+```
+
+---
+
+### Comparación de opciones de AWS Directory Service
+
+| Servicio | Descripción | ¿Aplica aquí? |
+|---|---|---|
+| **AD Connector** | Gateway que **redirige** requests al AD on-premises existente | ✅ Integra AD corporativo existente |
+| **Simple AD** | AD standalone en AWS con funciones básicas | ❌ No conecta con AD corporativo existente |
+| **AWS Managed Microsoft AD** | AD completo administrado por AWS en la nube | ❌ Crea un AD nuevo, no usa el existente |
+
+---
+
+### Por qué las otras opciones son incorrectas
+
+| Opción | Por qué no aplica |
+|---|---|
+| **Simple AD** | Subconjunto de features, no redirige al AD corporativo. Es un directorio independiente |
+| **IAM Groups** | Colección de usuarios IAM. No integra con Active Directory ni soporta federation |
+| **AWS Lambda** | Servicio de computación serverless, sin relación con autenticación/identidad |
+
+---
+
+### IAM Roles vs IAM Groups en este contexto
+
+```
+IAM Groups                       IAM Roles
+──────────                       ─────────
+Agrupa usuarios IAM nativos      Puede asignarse a usuarios/grupos
+Solo para identidades en AWS     de Active Directory federados ✅
+No soporta federation            Soporta identity federation ✅
+```
+
+---
+
+### Regla mental para el examen
+
+> - **AD corporativo existente + AWS** → **AD Connector** (no Simple AD)
+> - **Identity federation + permisos AWS** → **IAM Roles** (no IAM Groups)
+> - **Simple AD** → directorio standalone básico en AWS, sin conexión al AD on-premises
+> - **IAM Groups** → solo para usuarios IAM nativos de AWS, no para federation
+
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
+
+## KMS Custom Key Store + CloudHSM: Control Total sobre Claves de Cifrado
+
+### Los tres requisitos específicos del escenario
+
+```
+1. Control total sobre el cifrado de las claves
+2. Capacidad de eliminar el key material de AWS KMS inmediatamente
+3. Auditar el uso de claves independientemente de AWS CloudTrail
+```
+
+Estos tres requisitos juntos apuntan a una sola solución: **KMS Custom Key Store + CloudHSM**.
+
+---
+
+### Los tipos de KMS Keys y su nivel de control
+
+| Tipo de Key | ¿Quién la gestiona? | Control del cliente | Auditoría independiente |
+|---|---|---|---|
+| **AWS Owned Keys** | AWS (completamente) | ❌ Ninguno | ❌ No |
+| **AWS Managed Keys** | AWS (automáticamente) | ❌ Limitado | ❌ No |
+| **Customer Managed Keys** | Cliente (en KMS estándar) | ✅ Alto | ⚠️ Solo via CloudTrail |
+| **Custom Key Store (CloudHSM)** | Cliente (en su propio HSM) | ✅ Total | ✅ Independiente de CloudTrail |
+
+---
+
+### ¿Cómo funciona el Custom Key Store?
+
+```
+AWS KMS (front-end)
+         ↓ genera y usa keys
+Tu propio CloudHSM Cluster
+├── Key material NUNCA sale del HSM en texto plano
+├── Tú controlas el ciclo de vida de las keys
+├── Puedes eliminar key material inmediatamente ✅
+└── Auditoría independiente de AWS CloudTrail ✅
+```
+
+---
+
+### Por qué las otras opciones fallan
+
+| Opción | Error específico |
+|---|---|
+| **Custom Key Store + Amazon S3** | S3 es almacenamiento general, no tiene el nivel de seguridad criptográfica de un HSM. No cumple los requisitos de control y auditoría |
+| **AWS Owned Keys + CloudHSM** | AWS Owned Keys son gestionadas completamente por AWS → sin control del cliente ❌ |
+| **AWS Managed Keys + CloudHSM** | AWS Managed Keys también son gestionadas por AWS → sin auditoría independiente de CloudTrail ❌ |
+
+---
+
+### Cuándo usar Custom Key Store (criterios clave)
+
+```
+✅ Necesitas HSM dedicado bajo tu control directo (single-tenancy)
+✅ Debes poder revocar/eliminar key material inmediatamente
+✅ Compliance requiere auditoría independiente de AWS KMS y CloudTrail
+```
+
+---
+
+### Regla mental para el examen
+
+> - **Control total + eliminar key material + auditoría independiente** → **KMS Custom Key Store + CloudHSM**
+> - **Keys gestionadas por AWS sin overhead** → **AWS Managed Keys**
+> - **Keys del cliente en KMS estándar** → **Customer Managed Keys**
+> - **CloudHSM sin KMS** → HSM dedicado para casos que no requieren integración con servicios AWS
+> - **Amazon S3** → nunca para almacenar key material criptográfico
+   
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
+
+## S3 Versioning + MFA Delete: Protección contra Borrado Accidental
+
+### Los dos mecanismos de protección correctos
+
+**1. Versioning → preserva todas las versiones**
+```
+Sin Versioning:
+DELETE objeto.txt → objeto desaparecido para siempre ❌
+
+Con Versioning:
+DELETE objeto.txt → S3 agrega un "delete marker"
+                    versiones anteriores siguen existiendo ✅
+                    → puedes restaurar eliminando el delete marker
+```
+
+**2. MFA Delete → capa adicional de seguridad**
+```
+Para operaciones destructivas irreversibles se requiere:
+├── Credenciales de seguridad normales
+└── Código de 6 dígitos del dispositivo MFA físico
+
+Protege contra:
+├── Cambiar el estado de Versioning del bucket
+└── Eliminar permanentemente una versión de objeto
+```
+
+---
+
+### Por qué las otras opciones no cumplen el requisito
+
+| Opción | Por qué falla |
+|---|---|
+| **IAM bucket policy que niega Delete** | Bloquea **todos** los deletes, incluyendo los intencionales. El requisito es proteger contra accidentales, no prohibir todos |
+| **Pre-signed URLs solamente** | Controla acceso temporal a objetos, no previene borrados accidentales |
+| **S3 Intelligent-Tiering** | Optimiza costos moviendo datos entre clases de storage. No tiene relación con protección contra borrado |
+
+---
+
+### La combinación correcta y por qué funciona juntos
+
+```
+Versioning                       MFA Delete
+──────────                       ──────────
+Guarda todas las versiones       Requiere MFA para eliminar
+Permite recuperar objetos        versiones permanentemente
+borrados accidentalmente         
+Primera línea de defensa ✅      Segunda línea de defensa ✅
+```
+
+---
+
+### Regla mental para el examen
+
+> - **Recuperar objetos borrados/sobreescritos accidentalmente** → **Versioning**
+> - **Prevenir borrado permanente sin autorización fuerte** → **MFA Delete**
+> - Ambos juntos = protección completa contra borrado accidental e intencional no autorizado
+> - **Pre-signed URLs** → acceso temporal controlado, no protección contra borrado
+> - **IAM Deny Delete** → demasiado restrictivo, bloquea también borrados legítimos
+   
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
+
+## AWS WAF + Firewall Manager: Protección SQL Injection Multi-Cuenta
+
+### Los dos requisitos del escenario
+
+```
+1. Bloquear SQL injection attacks en ALBs
+2. Aplicar la protección en múltiples cuentas AWS
+```
+
+---
+
+### La solución: WAF + Firewall Manager
+
+```
+AWS WAF
+├── Managed Rule: AWSManagedRulesSQLiRuleSet
+│   └── Bloquea patrones de SQL injection ✅
+├── Asociado al Application Load Balancer
+└── Web ACL con acción: BLOCK
+
+          +
+
+AWS Firewall Manager
+└── Centraliza y reutiliza las reglas WAF
+    en todas las cuentas AWS de la organización ✅
+```
+
+---
+
+### Por qué las otras opciones fallan
+
+| Opción | Servicio mal usado | Error específico |
+|---|---|---|
+| **Network Firewall + refactorizar** | Network Firewall protege VPCs, no ALBs específicamente. Refactorizar requiere tiempo enorme | ❌ No es solución inmediata |
+| **GuardDuty + Security Hub** | GuardDuty es **detección de amenazas**, no puede asociarse a un ALB ni bloquear tráfico | ❌ No bloquea, solo detecta |
+| **Macie + Audit Manager** | Macie protege **datos sensibles en S3**. Audit Manager es para compliance/auditoría, no seguridad de red | ❌ Servicios completamente irrelevantes |
+
+---
+
+### Mapa de servicios de seguridad AWS
+
+```
+Capa de aplicación (HTTP/SQL injection/XSS)  → AWS WAF
+Capa de red/VPC (firewall stateful)          → AWS Network Firewall
+Ataques DDoS volumétricos                    → AWS Shield Advanced
+Detección de amenazas con ML                 → Amazon GuardDuty
+Datos sensibles en S3 (PII)                  → Amazon Macie
+Gestión centralizada multi-cuenta de WAF     → AWS Firewall Manager
+Auditoría de compliance                      → AWS Audit Manager
+```
+
+---
+
+### Regla mental para el examen
+
+> - **SQL injection / XSS + ALB/CloudFront/API GW** → **AWS WAF**
+> - **Reutilizar reglas WAF en múltiples cuentas** → **AWS Firewall Manager**
+> - **GuardDuty** → detecta, nunca bloquea directamente
+> - **Network Firewall** → protege VPCs, no específicamente ALBs
+> - **Macie** → siempre relacionado con datos sensibles en S3, nunca con ataques web
+   
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
+
+## Identity Federation + IAM Roles: SSO para 1200 Usuarios en S3
+
+### Los requisitos del escenario
+
+```
+1. Single Sign-On desde AD/LDAP corporativo (no crear nuevas identidades AWS)
+2. Acceso restringido a carpeta individual por usuario en S3
+3. Solución para 1200 empleados
+```
+
+---
+
+### Las dos respuestas correctas
+
+**1. Federation Proxy / Identity Provider + AWS STS**
+```
+Usuario corporativo
+         ↓ credenciales AD/LDAP
+Identity Provider (IdP) / Federation Proxy
+         ↓ autenticación exitosa
+AWS STS (Security Token Service)
+         ↓ genera credenciales temporales
+Acceso a AWS (S3) sin crear IAM users ✅
+```
+
+**2. IAM Role + IAM Policy**
+```
+IAM Policy con variable de política:
+{
+  "Resource": "arn:aws:s3:::bucket/${aws:username}/*"
+                                    ↑
+                          Variable dinámica por usuario
+}
+→ Cada usuario accede SOLO a su carpeta ✅
+```
+
+---
+
+### Por qué las otras opciones son incorrectas
+
+| Opción | Por qué falla |
+|---|---|
+| **Soluciones SSO de terceros (Okta, etc.)** | AWS ya provee las herramientas necesarias (STS + Federation). No es necesario pagar por soluciones externas |
+| **Amazon WorkDocs** | Servicio de colaboración de documentos, no tiene integración directa con S3 para este caso |
+| **Crear 1200 IAM Users** | Innecesario y no integra con AD/LDAP corporativo. Viola el requisito de SSO |
+
+---
+
+### El flujo completo de Enterprise Identity Federation
+
+```
+AD/LDAP corporativo
+         ↓ SAML 2.0 / OpenID Connect
+Federation Proxy o IdP (ej: AD FS)
+         ↓
+AWS STS → AssumeRoleWithSAML
+         ↓ credenciales temporales
+IAM Role (con policy que usa ${aws:username})
+         ↓
+S3 bucket/nombreusuario/* (solo su carpeta) ✅
+```
+
+---
+
+### Regla mental para el examen
+
+> - **SSO + AD/LDAP corporativo + AWS** → **Federation + STS** (no crear IAM Users)
+> - **Restringir acceso por usuario en S3** → **IAM Policy con variables** (`${aws:username}`)
+> - **1200+ usuarios** → nunca crear IAM Users individuales (no escala, no integra con AD)
+> - **STS** → siempre genera credenciales **temporales** (no permanentes)
+   
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
+
+## AWS DMS con CDC + SSL: Migración y Replicación Continua
+
+### Los requisitos del escenario
+
+```
+1. Copiar MySQL on-premises → S3 como CSV (carga inicial)
+2. Capturar cambios continuos después de la migración (ongoing)
+3. Alta seguridad (conexiones cifradas)
+4. Poco overhead de gestión
+```
+
+---
+
+### La solución correcta: DMS Full Load + CDC + SSL
+
+```
+MySQL on-premises
+         ↓ Full Load (carga inicial completa)
+         ↓ + CDC (Change Data Capture - cambios continuos)
+AWS DMS con endpoint SSL
+├── Certificado CA propio añadido a DMS console
+├── Conexión cifrada TLS ✅
+└── Salida en formato .csv por defecto ✅
+         ↓
+Amazon S3 bucket (CSV files)
+         ↓ (futuro)
+Aurora Serverless + RDS Proxy
+```
+
+---
+
+### Full Load vs CDC: roles distintos pero complementarios
+
+```
+Full Load                        CDC (Change Data Capture)
+──────────                       ─────────────────────────
+Copia TODOS los datos            Captura SOLO los cambios
+existentes al inicio             después de la carga inicial
+Migración inicial ✅             Sincronización continua ✅
+Una sola vez                     Streaming permanente
+```
+
+> La pregunta requiere **ambos** en la misma tarea DMS.
+
+---
+
+### Por qué las otras opciones fallan
+
+| Opción | Error específico |
+|---|---|
+| **DMS Full Load únicamente + Network Firewall para SSL** | Sin CDC → no captura cambios continuos. Network Firewall no crea certificados DMS, eso se hace directo en la consola DMS |
+| **SCT + AWS MGN** | SCT convierte esquemas, no replica datos. MGN es para lift-and-shift de aplicaciones completas, no para replicación de DB |
+| **Snowball Edge + DataSync** | Snowball es para migraciones masivas físicas. DataSync para replicación requiere pasos extra innecesarios cuando DMS lo hace directamente |
+
+---
+
+### Regla mental para el examen
+
+> - **Migrar DB + capturar cambios continuos** → **DMS Full Load + CDC**
+> - **Cifrar conexiones DMS** → **SSL con CA certificate** (no Network Firewall)
+> - **Convertir esquema entre motores** → **AWS SCT** (heterogéneo)
+> - **Migrar servidores completos (lift-and-shift)** → **AWS MGN**
+> - **DMS → S3** genera archivos **.csv por defecto** (también soporta Parquet)
+   
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
+
+## Respuesta: AWS CloudTrail
+
+```
+AWS CloudTrail registra:
+├── Todas las llamadas API a recursos AWS ✅
+├── Acciones via consola, SDK, CLI y servicios AWS
+├── Quién hizo qué, cuándo y desde dónde
+└── Datos para auditoría y compliance ✅
+```
+
+---
+
+### Por qué los otros servicios no aplican
+
+| Servicio | Propósito real |
+|---|---|
+| **Amazon CloudWatch** | Monitorea **métricas y logs** de rendimiento. No rastrea API calls específicas |
+| **AWS X-Ray** | **Debugging y tracing** de microservicios. No audita API calls de infraestructura |
+| **Redshift Spectrum** | **Feature de Redshift** para consultar datos en S3. No es un servicio de monitoreo |
+| **AWS CloudTrail** | ✅ Registra toda la actividad API en tu cuenta AWS |
+
+---
+
+### Regla mental para el examen
+
+> - **Auditoría de API calls + compliance** → **AWS CloudTrail**
+> - **Métricas de rendimiento + alarmas** → **Amazon CloudWatch**
+> - **Debugging de microservicios + tracing** → **AWS X-Ray**
+   
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
+
+## Bastion Host Windows: Configuración Segura en Subnet Pública
+
+### Qué es un bastion host
+
+```
+Internet (administradores)
+         ↓ RDP (puerto 3389)
+Bastion Host (EC2 Windows en subnet PÚBLICA)
+├── Elastic IP asociada → IP fija conocida
+├── Security Group: RDP solo desde IPs corporativas ✅
+         ↓ RDP / acceso administrativo
+EC2 instances en subnets privadas
+```
+
+Un bastion host actúa como punto único de entrada administrativo seguro (jump server).
+
+---
+
+### Los atributos obligatorios del bastion host
+
+| Atributo | Valor correcto | Razón |
+|---|---|---|
+| **Tipo de subnet** | Pública | Debe ser accesible desde internet para los admins remotos |
+| **IP** | Elastic IP | IP fija para configurar en el firewall corporativo |
+| **Protocolo** | RDP (port 3389) | Es Windows. SSH (22) es para Linux |
+| **Acceso desde** | Solo IPs corporativas | Limitar superficie de ataque |
+
+---
+
+### Por qué cada opción incorrecta falla
+
+**❌ Bastion en subnet pública pero con SSH desde cualquier lugar**
+> Windows usa RDP (3389), no SSH (22). SSH es para instancias Linux. Además, "desde cualquier lugar" viola el requisito de restringir el acceso.
+
+**❌ Bastion en la red corporativa con RDP a todas las instancias**
+> El bastion debe estar en la VPC de AWS (subnet pública), no en la red corporativa on-premises.
+
+**❌ Bastion en subnet PRIVADA con solo IPs corporativas**
+> Una subnet privada no tiene acceso directo a internet. Los administradores no podrían conectarse al bastion. Debe estar en una subnet pública.
+
+---
+
+### Regla mental para el examen
+
+> - **Bastion host** → siempre en **subnet pública** con **Elastic IP**
+> - **Windows → RDP (TCP 3389)**, Linux → SSH (TCP 22)
+> - **Acceso desde** → solo IPs corporativas conocidas (no 0.0.0.0/0)
+> - El bastion actúa como "jump server": te conectas al bastion, y desde allí gestionas las instancias privadas
+
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
+
+---
+
+# CSAA – Design Cost-Optimized Architectures
+
+---
+
+
+## S3 Lifecycle Policies: Almacenamiento Cost-Effective para Archivos Antiguos
+
+### Los requisitos del escenario
+
+- Archivos **mayores de 2 años** → mover a storage más barato
+- Solución **escalable, durable y de alta disponibilidad**
+- **Costo-efectiva**
+
+---
+
+### Las dos respuestas correctas: S3 con Lifecycle Policies
+
+S3 permite transicionar objetos automáticamente entre clases de almacenamiento:
+
+```
+S3 Standard (0-2 años)
+         ↓  [Lifecycle Rule: después de 730 días]
+         ├──→ S3 Standard-IA   (acceso infrecuente, aún rápido)
+         └──→ S3 Glacier       (archivado, acceso en 1-5 min con Expedited)
+```
+
+Ambas opciones cumplen los requisitos porque S3 no tiene límite máximo en días para lifecycle rules.
+
+---
+
+### Por qué las otras opciones fallan
+
+**❌ Amazon EFS + lifecycle policy hacia EFS-IA**
+```
+EFS Lifecycle máximo: 365 días (1 año)
+Requisito:           730 días (2 años)
+→ Técnicamente imposible de cumplir con EFS
+```
+
+**❌ Amazon EBS + Data Lifecycle Manager (DLM)**
+```
+EBS problemas:
+├── Más costoso que S3
+├── No es escalable para múltiples EC2 (limitaciones de acceso simultáneo)
+├── Multi-attach solo en Provisioned IOPS → muy caro
+└── DLM gestiona snapshots, no transiciones de storage class
+```
+
+**❌ RAID 0 con múltiples EBS + DLM**
+```
+RAID 0  → Mejora rendimiento I/O (striping)
+RAID 1  → Redundancia (mirroring)
+Ninguno → Soluciona el problema de costo/escalabilidad
+Además: mismos problemas de costo que EBS estándar
+```
+
+---
+
+### Comparación de clases S3 para este caso
+
+| Clase | Acceso | Costo almacenamiento | Ideal para |
+|---|---|---|---|
+| S3 Standard | Inmediato | Alto | Archivos activos (0-2 años) |
+| S3 Standard-IA | Inmediato | Medio | Acceso infrecuente pero rápido |
+| S3 Glacier | 1-5 min (Expedited) | Bajo | Archivado largo plazo ✅ |
+| S3 Glacier Deep Archive | Horas | Mínimo | Archivado raramente accedido |
+
+---
+
+### Regla mental para el examen
+
+> - Mover objetos automáticamente según antigüedad → **S3 Lifecycle Policy**
+> - EFS lifecycle: máximo **365 días** → no sirve para períodos mayores a 1 año
+> - EBS → costoso, no escalable para múltiples instancias simultáneas
+> - **S3 siempre gana** en escalabilidad, durabilidad y costo para almacenamiento de archivos
+   
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
+
+## AWS Lake Formation: Data Lake Centralizado Multi-Cuenta
+
+### ¿Qué es AWS Lake Formation?
+
+Es un servicio que simplifica la creación de un **data lake seguro** en días, no meses. Actúa como capa de gobierno sobre Amazon S3.
+
+```
+Múltiples cuentas AWS
+├── Cuenta A (datos ventas)
+├── Cuenta B (datos clientes)     →    Lake Formation    →   Data Lake
+└── Cuenta C (datos operaciones)       (cuenta central)      en S3
+```
+
+---
+
+### Componentes clave de Lake Formation
+
+```
+Amazon S3          → Capa de almacenamiento del data lake
+AWS Glue           → Data Catalog (describe datasets disponibles)
+Lake Formation     → Gobierno, seguridad y control de acceso
+IAM / AD           → Gestión de identidades y permisos
+```
+
+**Control de acceso granular:**
+- Permisos sobre **tablas y columnas** (no sobre buckets/objetos como S3 nativo)
+- Grant/revoke simple a usuarios IAM, roles, grupos, Active Directory
+- Cross-account sharing **incluido y gratuito**
+
+---
+
+### Por qué las otras opciones fallan
+
+| Opción | Problema |
+|---|---|
+| **Amazon Data Firehose** | Configurar Firehose en cada cuenta es costoso e impráctico. Lake Formation ofrece cross-account sharing gratis |
+| **Lambda + EventBridge** | Técnicamente posible con SDK, pero muy difícil de gestionar. Viola el requisito de "minimizar overhead operacional" |
+| **AWS Control Tower** | Gobierna y gestiona **múltiples cuentas AWS** en general, no está diseñado específicamente para consolidar datos en S3 |
+
+---
+
+### Regla mental para el examen
+
+> - **Consolidar datos de múltiples cuentas** con mínimo overhead → **AWS Lake Formation**
+> - **Catalogar y describir datasets** → **AWS Glue Data Catalog** (integrado en Lake Formation)
+> - **Streaming de datos hacia S3/Redshift** → **Amazon Data Firehose**
+> - **Gobernar múltiples cuentas AWS** (no solo datos) → **AWS Control Tower**
+   
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
+
+## Migración Oracle a AWS: DMS + RDS Multi-AZ
+
+### Los dos requisitos del escenario
+
+1. **Migrar** la base de datos Oracle on-premises a AWS
+2. **Alta disponibilidad** ante fallos de servidor de base de datos
+
+---
+
+### Las dos respuestas correctas
+
+**1. AWS Database Migration Service (DMS) → para la migración**
+```
+On-premises Oracle  →  AWS DMS  →  RDS Oracle
+                       ↑
+               - Mínimo downtime
+               - Zero data loss
+               - Soporta +20 motores
+               - Oracle → RDS Oracle (migración homogénea)
+```
+
+**2. RDS Oracle con Multi-AZ → para alta disponibilidad**
+```
+AZ-A: RDS Oracle (primario)  ←→  AZ-B: RDS Oracle (standby)
+         ↓ sincronización síncrona
+Si primario falla → failover automático al standby
+Mismo endpoint → aplicación no necesita cambios
+```
+
+---
+
+### Por qué las otras opciones fallan
+
+| Opción | Por qué es incorrecta |
+|---|---|
+| **RDS Oracle con RMAN** | Oracle Recovery Manager **no está soportado** en RDS. AWS gestiona los backups por ti |
+| **AWS Schema Conversion Tool** | SCT es para migraciones **heterogéneas** (Oracle → PostgreSQL). Este caso es Oracle → Oracle (homogénea), no necesita conversión de esquema |
+| **Aurora single instance** | Sin Multi-AZ = sin alta disponibilidad. No apto para cargas críticas de producción |
+
+---
+
+### Migración homogénea vs heterogénea
+
+```
+Homogénea (mismo motor)          Heterogénea (diferente motor)
+────────────────────             ─────────────────────────────
+Oracle → Oracle ✅ aquí          Oracle → PostgreSQL
+MySQL → MySQL                    SQL Server → Aurora
+Solo necesita DMS                Necesita SCT + DMS
+```
+
+> **Regla:** Si el motor de origen y destino son **iguales** → solo DMS. Si son **diferentes** → SCT primero para convertir el esquema, luego DMS para migrar los datos.
+
+---
+
+### Regla mental para el examen
+
+> - **Migrar base de datos** a AWS con mínimo downtime → **AWS DMS**
+> - **Cambiar de motor** de base de datos → **AWS SCT + DMS**
+> - **Alta disponibilidad** en RDS ante fallos → **Multi-AZ**
+> - **Escalar lecturas** en RDS → **Read Replicas**
+> - Oracle RMAN en RDS → **no soportado**
+   
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
+
+## EBS + S3 + S3 Glacier: Solución de Almacenamiento en Tres Capas
+
+### Los tres requisitos del escenario
+
+```
+1. Block storage persistente    → misión crítica
+2. Object storage para backups  → primeros 30 días
+3. Archival storage             → después de 30 días, largo plazo
+```
+
+---
+
+### La solución correcta capa por capa
+
+```
+EC2 Instance
+└── EBS Volume          ← bloque persistente para workloads críticos
+         ↓ backup
+    S3 Standard         ← object storage (días 0-30)
+         ↓ lifecycle policy (día 30)
+    S3 Glacier Flexible Retrieval  ← archivado largo plazo
+```
+
+---
+
+### Las dos decisiones clave que determinan la respuesta
+
+**1. EBS vs Instance Store**
+
+| | EBS | Instance Store |
+|---|---|---|
+| Persistencia | ✅ Persiste independiente del EC2 | ❌ Temporal, se pierde al detener/terminar |
+| Misión crítica | ✅ Ideal | ❌ No apto |
+| Adjuntar después del lanzamiento | ✅ Sí | ❌ Solo al lanzar la instancia |
+| Snapshots | ✅ Sí | ❌ No |
+
+**2. S3 Glacier Flexible Retrieval vs S3 One Zone-IA**
+
+| | S3 Glacier Flexible Retrieval | S3 One Zone-IA |
+|---|---|---|
+| Propósito | **Archivado** largo plazo | Acceso infrecuente (no archivado) |
+| Costo | Muy bajo | Medio |
+| Disponibilidad | Multi-AZ | **Una sola AZ** |
+| Recuperación | Minutos a horas | Inmediata |
+
+---
+
+### El distractor del EBS Snapshot
+
+> El enunciado menciona una "EBS snapshot retention rule" intencionalmente para confundir. Los EBS snapshots se almacenan internamente en S3, pero son gestionados por separado y **no pueden transicionarse** con lifecycle policies de S3 hacia Glacier.
+
+---
+
+### Regla mental para el examen
+
+> - **Block storage persistente** para workloads críticos → **EBS**
+> - **Block storage temporal** (alta I/O, efímero) → **Instance Store**
+> - **Archivado** a largo plazo en S3 → **S3 Glacier Flexible Retrieval**
+> - **Acceso infrecuente** pero no archivado → **S3 Standard-IA**
+> - **One Zone-IA** → más barato pero sin redundancia multi-AZ, no apto para archivado crítico
+   
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
+
+## Migración .NET + Oracle a AWS: Mínimos Cambios, Alta Disponibilidad
+
+### Los requisitos del escenario
+
+- **Minimizar cambios** de desarrollo (no refactorizar)
+- **Alta disponibilidad** en la nube
+- **Más fácil de gestionar** que on-premises
+
+---
+
+### Las dos respuestas correctas
+
+**1. Elastic Beanstalk Multi-AZ → para la aplicación .NET**
+```
+On-premises .NET (Windows Server + IIS)
+         ↓ rehost (lift & shift)
+Elastic Beanstalk Multi-AZ
+├── Soporta .NET nativamente ✅
+├── Gestiona automáticamente: EC2, Load Balancing, Scaling, Health monitoring
+├── Sin cambios de código ✅
+└── Multi-AZ = alta disponibilidad ✅
+```
+
+**2. RDS for Oracle Multi-AZ + DMS → para la base de datos**
+```
+On-premises Oracle Standard Edition
+         ↓ migración homogénea (Oracle → Oracle)
+RDS for Oracle Multi-AZ
+├── Mismo motor = sin conversión de schema ✅
+├── AWS DMS maneja la migración con mínimo downtime ✅
+└── Multi-AZ = failover automático ✅
+```
+
+---
+
+### Por qué las otras opciones violan los requisitos
+
+| Opción | Tipo de migración | Problema |
+|---|---|---|
+| **Refactorizar a .NET Core + EKS/Fargate** | Refactor | Cambios significativos de código ❌ |
+| **ECS + EC2 worker nodes + ECS Anywhere** | Replatform | Debes gestionar los EC2 subyacentes + cambios de plataforma ❌ |
+| **AWS MGN para Oracle → EC2** | Rehost de DB en EC2 | MGN no es la herramienta adecuada para Oracle; además EC2 requiere más gestión que RDS ❌ |
+
+---
+
+### Los 6 tipos de migración ("6 Rs") aplicados aquí
+
+```
+Retire     → eliminar
+Retain     → mantener on-premises
+Rehost     → lift & shift sin cambios      ← Elastic Beanstalk aquí ✅
+Replatform → lift & reshape (mínimos cambios de plataforma)
+Repurchase → cambiar a SaaS
+Refactor   → rediseñar la arquitectura     ← EKS/Fargate aquí ❌ (demasiados cambios)
+```
+
+---
+
+### Regla mental para el examen
+
+> - **"Minimizar cambios" + aplicación .NET** → **Elastic Beanstalk** (gestión automática, soporta .NET/IIS)
+> - **Migración Oracle → Oracle** (homogénea) → **AWS DMS** (sin Schema Conversion Tool)
+> - **Migración Oracle → otro motor** (heterogénea) → **AWS SCT + DMS**
+> - **Rehost de servidores completos** (cualquier OS) → **AWS Application Migration Service (MGN)**
+> - **Refactorizar = cambios de código** → contradice "minimizar cambios de desarrollo"
+
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
+
+## EC2 Billing: Cuándo se Cobra y Cuándo No
+
+### Mapa de estados EC2 y su facturación
+
+```
+pending      → ❌ NO se cobra (preparando para ejecutar)
+running      → ✅ SÍ se cobra (estado normal de operación)
+stopping     → ⚠️ DEPENDE:
+               ├── Preparando para STOP    → ❌ NO se cobra
+               └── Preparando para HIBERNATE → ✅ SÍ se cobra
+stopped      → ❌ NO se cobra (apagado)
+shutting-down → ❌ NO se cobra (preparando para terminar)
+terminated   → ⚠️ DEPENDE del tipo:
+               ├── On-Demand terminada     → ❌ NO se cobra
+               └── Reserved Instance terminada → ✅ SÍ se cobra
+                   (hasta el fin del término contratado)
+```
+
+---
+
+### Las dos respuestas correctas explicadas
+
+**✅ On-Demand en `stopping` preparando para hibernar → SE COBRA**
+> Durante hibernación, el contenido de RAM se guarda en el volumen EBS. La instancia mantiene su estado y sigue incurriendo en cargos durante este proceso.
+
+**✅ Reserved Instance en estado `terminated` → SE COBRA**
+> Las Reserved Instances se pagan por contrato (1 o 3 años). Aunque la instancia se termine, el compromiso de pago continúa hasta el fin del término.
+
+---
+
+### Por qué las otras opciones son incorrectas
+
+| Opción | Por qué es falsa |
+|---|---|
+| **Spot instance en `stopping`** | No se cobra cuando se prepara para detenerse |
+| **On-Demand en `pending`** | Pending es solo preparación inicial, sin cargo |
+| **"No se cobra si no está en `running`"** | Falso: hibernación (`stopping`) y Reserved terminadas sí se cobran |
+
+---
+
+### Regla mental para el examen
+
+> - **`stopping` → stop** = no se cobra
+> - **`stopping` → hibernate** = sí se cobra
+> - **Reserved Instance terminada** = sigue cobrándose hasta fin del contrato
+> - **`pending`, `stopped`, `shutting-down`** = no se cobra en On-Demand/Spot
+   
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
+
+## S3 + DynamoDB: Solución Costo-Efectiva para Base de Datos GIS
+
+### Los requisitos del escenario
+
+```
+1. Almacenar imágenes de alta resolución con códigos geográficos
+2. Actualizaciones frecuentes (minuto a minuto)
+3. Alta disponibilidad y escalabilidad
+4. Migrar desde Oracle
+5. Costo-efectivo
+```
+
+---
+
+### La solución correcta: S3 + DynamoDB
+
+```
+Imagen de alta resolución → Amazon S3 (object storage) ✅
+                                    ↓ URL del objeto
+DynamoDB Table:
+┌─────────────────┬──────────────────────────────┐
+│ geographic_code │ image_s3_url                 │
+│ (Primary Key)   │ (valor asociado)             │
+├─────────────────┼──────────────────────────────┤
+│ GEO-LAT123      │ s3://bucket/imagen-123.tif   │
+│ GEO-LAT456      │ s3://bucket/imagen-456.tif   │
+└─────────────────┴──────────────────────────────┘
+```
+
+**¿Por qué esta combinación?**
+- S3 → almacenamiento ilimitado y económico para imágenes grandes
+- DynamoDB → clave-valor de baja latencia, altamente escalable, sin servidor que gestionar
+
+---
+
+### Por qué las otras opciones fallan
+
+| Opción | Error específico |
+|---|---|
+| **RDS Oracle Multi-AZ** | Almacenar imágenes como BLOBs en Oracle es costoso (licencias Oracle + instancias grandes). S3 es mucho más económico para objetos estáticos |
+| **S3 + Amazon Keyspaces (Cassandra)** | Keyspaces es para datos de alta velocidad con esquemas flexibles. DynamoDB es más adecuado para este simple caso de clave-valor |
+| **DynamoDB + DAX para imágenes** | ❌ Dos problemas: (1) Las imágenes de alta resolución exceden el límite de 400 KB por ítem en DynamoDB. (2) DAX optimiza **lecturas**, pero el sistema es **write-intensive** → innecesario y costoso |
+
+---
+
+### Límites importantes de DynamoDB a recordar
+
+```
+Tamaño máximo por ítem: 400 KB
+→ Nunca almacenes imágenes/archivos grandes directamente en DynamoDB
+→ Solución correcta: S3 para el objeto + DynamoDB para la referencia (URL)
+```
+
+---
+
+### Regla mental para el examen
+
+> - **Imágenes/archivos grandes** → siempre en **S3**, nunca directamente en DynamoDB
+> - **Referencia/metadata de objetos S3** → **DynamoDB** (clave-valor rápido)
+> - **DAX** → solo justificado para sistemas **read-heavy**, no write-intensive
+> - **Keyspaces** → esquemas flexibles y alta velocidad, no simple clave-valor
+> - **Oracle en RDS** → costoso por licencias; migrar a servicios nativos AWS ahorra dinero
+   
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
+Esta es una pregunta conceptual directa. Aquí el resumen:
+
+### Respuesta: AWS Storage Gateway
+
+Es el servicio diseñado específicamente para **extender infraestructura on-premises hacia la nube AWS**, actuando como puente entre ambos entornos.
+
+---
+
+### Por qué las otras opciones no aplican
+
+| Servicio | Propósito real |
+|---|---|
+| **Amazon EC2** | Servicio de **cómputo** (servidores virtuales), no storage |
+| **Amazon EBS** | Block storage **exclusivo para instancias EC2**, no extiende on-premises |
+| **Amazon SQS** | Servicio de **colas de mensajes**, sin relación con storage |
+| **AWS Storage Gateway** | ✅ Conecta on-premises con cloud storage de forma transparente |
+
+---
+
+### Regla mental para el examen
+
+> - **Extender storage on-premises hacia AWS** → **AWS Storage Gateway**
+> - Los tres tipos de Gateway (File, Tape, Volume) cubren diferentes casos de uso, pero todos resuelven la integración híbrida on-premises ↔ AWS
+   
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
+
+## AWS DataSync + S3 Glacier Deep Archive: Migración de Datos Históricos
+
+### El problema del escenario
+
+```
+On-premises storage casi lleno
+├── Datos activos → deben quedarse on-premises
+└── Datos históricos (cold data) → mover a AWS
+                                   para liberar espacio
+```
+
+---
+
+### La solución correcta: DataSync → S3 Glacier Deep Archive directo
+
+```
+On-premises (datos históricos)
+         ↓
+AWS DataSync
+├── Velocidad hasta 10x mayor que herramientas open-source
+├── Maneja scripting, scheduling, monitoreo automáticamente
+├── Sin modificar aplicaciones existentes
+└── Transferencia directa a Glacier Deep Archive ✅
+         ↓
+S3 Glacier Deep Archive (costo mínimo para archivado)
+```
+
+---
+
+### Por qué las otras opciones son incorrectas
+
+| Opción | Problema específico |
+|---|---|
+| **Storage Gateway → Glacier Deep Archive** | Storage Gateway está diseñado para **acceso híbrido continuo con caché**, no para migración masiva de datos históricos |
+| **Storage Gateway → Glacier → lifecycle a Deep Archive** | Mismo problema + pasos innecesarios adicionales |
+| **DataSync → S3 Standard → lifecycle → Glacier Deep Archive (30 días)** | DataSync puede ir **directamente** a Glacier Deep Archive. No necesitas S3 Standard + esperar 30 días |
+
+---
+
+### DataSync vs Storage Gateway: distinción clave
+
+```
+AWS DataSync                     AWS Storage Gateway
+────────────                     ───────────────────
+Migración/transferencia          Integración híbrida continua
+masiva de datos                  on-premises ↔ AWS
+One-time o periódica             Acceso permanente con caché local
+Hasta 10x más rápido             Optimiza cambios incrementales
+Para mover datos fríos/históricos Para acceder datos activos en nube
+```
+
+---
+
+### Regla mental para el examen
+
+> - **Mover datos históricos/fríos de on-premises a AWS** → **AWS DataSync**
+> - **Acceso híbrido continuo con caché local** → **AWS Storage Gateway**
+> - **Archivado de largo plazo más económico en S3** → **S3 Glacier Deep Archive**
+> - DataSync puede escribir **directamente** en Glacier Deep Archive sin pasar por S3 Standard
+   
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
+
+## AWS Control Tower: Gobernanza Multi-Cuenta con Mínimo Esfuerzo
+
+### Los requisitos del escenario
+
+```
+1. Crear múltiples cuentas AWS dentro de una Organización
+2. Configuraciones preaprobadas por el equipo de seguridad
+3. Estandarizar baselines y configuraciones de red
+4. Mínimo esfuerzo de implementación
+```
+
+---
+
+### La solución: AWS Control Tower Landing Zone
+
+```
+AWS Control Tower
+├── Landing Zone → entorno multi-cuenta bien arquitectado
+├── Account Factory → crea cuentas con configuraciones preaprobadas ✅
+├── Guardrails → políticas de gobernanza pre-empaquetadas
+│   ├── Preventivos (SCPs) → bloquean recursos no conformes
+│   └── Detectivos (AWS Config) → detectan no-conformidad
+└── Automatiza: CloudFormation + SCPs + AWS Config rules
+```
+
+**Tres formas de crear cuentas en Control Tower:**
+```
+1. Account Factory console (AWS Service Catalog)
+2. Enroll account feature
+3. Lambda + IAM roles (programático)
+```
+
+---
+
+### Por qué las otras opciones fallan
+
+| Opción | Por qué es incorrecta |
+|---|---|
+| **AWS RAM** | Comparte **recursos existentes** entre cuentas. No crea cuentas nuevas ni estandariza configuraciones |
+| **AWS Config aggregator + conformance packs** | Config agrega datos de cumplimiento pero **no provisiona cuentas**. Los conformance packs son solo colecciones de reglas Config |
+| **Systems Manager OpsCenter + Security Hub** | OpsCenter gestiona **items operacionales** (tickets). No crea cuentas. Security Hub detecta hallazgos de seguridad, no estandariza configuraciones |
+
+---
+
+### Mapa de servicios de gobernanza AWS
+
+```
+Crear y gobernar múltiples cuentas    → AWS Control Tower
+Políticas a nivel de organización     → AWS Organizations (SCPs)
+Detectar no-cumplimiento de recursos  → AWS Config
+Compartir recursos entre cuentas      → AWS Resource Access Manager
+Hallazgos de seguridad centralizados  → AWS Security Hub
+Gestionar operaciones/incidentes      → Systems Manager OpsCenter
+```
+
+---
+
+### Regla mental para el examen
+
+> - **Crear cuentas con configuraciones estandarizadas + guardrails** → **AWS Control Tower**
+> - **Control Tower = Landing Zone + Account Factory + Guardrails**
+> - **AWS Config** → audita/detecta, no provisiona cuentas
+> - **AWS RAM** → comparte recursos, no crea cuentas
+> - Cuando el escenario menciona "múltiples cuentas + gobernanza + mínimo esfuerzo" → **Control Tower**
+   
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
+
+## Respuesta: Spot Instances
+
+Dos señales clave en el escenario indican Spot:
+
+```
+Señal 1: "Solo necesarias hasta reducir el backlog"
+→ Uso temporal, no permanente
+
+Señal 2: "Si el proceso se interrumpe, otro instance lo retoma"
+→ La aplicación tolera interrupciones ← característica clave para Spot
+```
+
+---
+
+### Comparación de tipos de instancia
+
+| Tipo | Costo | Interrupción | Ideal para |
+|---|---|---|---|
+| **Spot** | Hasta 90% menos que On-Demand | Posible (2 min aviso) | Cargas tolerantes a fallos ✅ |
+| **On-Demand** | Precio estándar | No | Cargas variables sin compromiso |
+| **Reserved** | Descuento por contrato 1-3 años | No | Cargas predecibles y permanentes |
+| **Dedicated** | El más caro | No | Requisitos de compliance/licencias |
+
+---
+
+### Regla mental para el examen
+
+> - **Temporal + tolerante a interrupciones + costo-efectivo** → **Spot Instances**
+> - Si el escenario menciona que la app puede **recuperarse de fallos** → Spot es la respuesta
+> - **Backlog temporal** = no necesitas Reserved (compromiso largo plazo)
+   
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
+
+## Respuesta: AWS Storage Gateway → S3 Glacier Deep Archive
+
+**Decisión 1: ¿Qué servicio para la transición desde tape backup?**
+```
+Organización usa tape backup on-premises
+         ↓
+AWS Storage Gateway (Tape Gateway)
+├── Reemplaza cintas físicas por cintas virtuales en AWS
+├── Compatible con aplicaciones de backup existentes ✅
+├── Sin cambiar workflows actuales
+└── Cifra y comprime datos automáticamente
+```
+
+**Decisión 2: ¿Qué clase de storage para 10 años + acceso 1-2 veces/año?**
+```
+S3 Glacier Flexible Retrieval    S3 Glacier Deep Archive
+──────────────────────────       ───────────────────────
+Retención largo plazo            Retención muy largo plazo ✅
+Acceso en minutos/horas          Acceso en horas (12-48h)
+Más costoso                      Hasta 75% más barato ✅
+                                 Ideal para 10 años ✅
+```
+
+---
+
+### Por qué las otras opciones fallan
+
+| Opción | Error |
+|---|---|
+| **Storage Gateway → Glacier Flexible Retrieval** | Válido pero más costoso que Deep Archive |
+| **Snowball Edge → Glacier Flexible Retrieval** | Snowball no integra directamente con Glacier. Además Flexible Retrieval es más caro |
+| **S3 + lifecycle → Glacier Flexible Retrieval** | Difícil integrar tape backup directamente con S3 sin Storage Gateway. Además Flexible Retrieval no es el más costo-efectivo |
+
+---
+
+### Regla mental para el examen
+
+> - **Tape backup on-premises → AWS** → **Storage Gateway (Tape Gateway)**
+> - **Archivado 10+ años + mínimo costo** → **S3 Glacier Deep Archive**
+> - Acceso ocasional (1-2 veces/año) tolera tiempo de recuperación de horas → Deep Archive es suficiente
+   
+
+
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
+
+## AWS Organizations + IAM Cross-Account: Governance y Cost Oversight
+
+### El problema: múltiples divisiones, un solo gobierno
+
+Una empresa con muchas divisiones necesita:
+1. Que cada división mantenga **control administrativo autónomo** de sus recursos
+2. Que IT central tenga **visibilidad de costos** y gobernanza sobre todas las cuentas
+
+---
+
+### Las dos respuestas correctas
+
+**1. AWS Organizations con Consolidated Billing**
+```
+Cuenta raíz (IT corporativo)
+├── Cuenta División A
+├── Cuenta División B
+└── Cuenta División C
+
+Consolidated Billing:
+├── Vista combinada de todos los cargos ✅
+├── Reporte de costos por cuenta miembro ✅
+└── Sin costo adicional
+```
+
+**2. IAM Cross-Account Access**
+```
+Cuenta División A     Cuenta División B
+└── IAM Role ─────────────────────────→ Administradores corporativos
+                                         acceden sin cambiar de cuenta ✅
+```
+
+> IAM cross-account: no es necesario crear IAM users individuales en cada cuenta. Los usuarios se autentican en su cuenta y usan roles en las cuentas de las divisiones.
+
+---
+
+### Por qué las otras opciones fallan
+
+| Opción | Por qué no aplica |
+|---|---|
+| **AWS Trusted Advisor + Resource Groups Tag Editor** | Trusted Advisor da recomendaciones de mejores prácticas, no gobierna cuentas. Tag Editor gestiona tags, no billing ni autonomía |
+| **VPCs separadas + Transit Gateway** | VPCs en la misma cuenta no separan divisiones a nivel de billing ni de control administrativo |
+| **Availability Zones separadas + Global Accelerator** | Las AZs no son divisiones. Global Accelerator optimiza routing de red, no governance de cuentas |
+
+---
+
+### Regla mental para el examen
+
+> - **Governance multi-cuenta + autonomía por división** → **AWS Organizations + IAM Cross-Account Access**
+> - **Visibilidad consolidada de costos** → **Consolidated Billing en AWS Organizations**
+> - **Trusted Advisor** → recomendaciones de mejores prácticas, no governance
+> - IAM Cross-Account → los usuarios no necesitan crear sesión nueva, usan `sts:AssumeRole`
+
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
+
+## Reserved Instance Marketplace: Qué Hacer con Instancias No Usadas
+
+### El escenario
+
+Una aplicación fue desmantelada y las Reserved Instances que la soportaban ya no se necesitan, pero el término de reserva sigue vigente. Se busca minimizar costos.
+
+---
+
+### Las dos acciones correctas
+
+**1. Terminar las instancias Reserved**
+```
+Instancia parada    → sigue incurriendo en cargos por EIP asociada ❌
+Instancia terminada → no hay más cargos por la instancia ni EIP ✅
+```
+
+**2. Vender en el Reserved Instance Marketplace**
+```
+AWS Reserved Instance Marketplace
+├── Vende RIs estándar no usadas a otros clientes AWS
+├── Recuperas parte del costo restante
+└── Liberas el compromiso de pago ✅
+```
+
+---
+
+### Por qué "detener" no es suficiente
+
+```
+Instancia DETENIDA:
+├── EIP asociada → sigue generando cargo ❌
+├── La RI sigue cobrando su tarifa reservada ❌
+└── Puede reiniciarse accidentalmente → cargos on-demand al expirar RI ❌
+
+Instancia TERMINADA:
+├── No hay instancia → no hay cargos de uso ✅
+└── La RI puede venderse en el Marketplace ✅
+```
+
+---
+
+### Por qué las otras opciones fallan
+
+| Opción | Por qué es incorrecta |
+|---|---|
+| **Solo detener las instancias** | Una instancia detenida aún puede reiniciarse. Las EIPs siguen cobrando. La RI sigue en vigor |
+| **Cancelar la suscripción AWS** | Completamente innecesario. Solo por RIs no usadas no se cancela toda la cuenta |
+| **Vender en Amazon.com** | Las RIs se venden en el AWS Reserved Instance Marketplace, no en el sitio de shopping de Amazon |
+
+---
+
+### Regla mental para el examen
+
+> - **RIs no usadas de aplicación desmantelada** → **Terminar instancias + vender en RI Marketplace**
+> - **Instancia detenida no es sin cargos** → las EIPs y la propia RI siguen cobrando
+> - **RI Marketplace** → solo para Reserved Instances estándar (no Convertible)
+> - Al expirar una RI sin terminar la instancia → la instancia sigue corriendo a precio on-demand
+
+&nbsp;   
+
+&nbsp;   
+
+&nbsp;
+
+
+## FSx NetApp ONTAP: Block Storage Multi-AZ con iSCSI para Trading App Windows
+
+### Los requisitos específicos
+
+```
+1. Aplicación de trading Windows → migración a AWS
+2. Alta disponibilidad multi-AZ
+3. Baja latencia en block storage (no file storage)
+```
+
+---
+
+### Por qué FSx for NetApp ONTAP es la respuesta
+
+Es el único servicio que combina los tres elementos necesarios simultáneamente:
+
+```
+FSx for NetApp ONTAP
+├── ✅ Multi-AZ nativo → alta disponibilidad entre zonas
+├── ✅ Protocolo iSCSI → block storage de baja latencia
+├── ✅ Compatible con Windows Server (también SMB, NFS)
+└── ✅ Latencia sub-milisegundo con almacenamiento SSD
+```
+
+---
+
+### Comparación de alternativas
+
+| Servicio | Protocolo | Multi-AZ | Block Storage | Windows | Veredicto |
+|---|---|---|---|---|---|
+| **FSx for Windows File Server** | SMB | ✅ | Solo file ❌ | ✅ | No soporta iSCSI/block ❌ |
+| **Amazon EFS** | NFS | ✅ | Solo file ❌ | Optimizado Linux ❌ | No apto para Windows ❌ |
+| **Amazon S3 + CRR** | HTTP/REST | ✅ | Object storage ❌ | ⚠️ | No es block storage ❌ |
+| **FSx for NetApp ONTAP** | iSCSI, SMB, NFS | ✅ | ✅ | ✅ | Cumple todo ✅ |
+
+---
+
+### Los tres tipos de almacenamiento y sus protocolos
+
+```
+Block Storage   → iSCSI, EBS          → baja latencia, apps críticas
+File Storage    → SMB, NFS            → archivos compartidos
+Object Storage  → HTTP/REST (S3)      → datos no estructurados, backups
+```
+
+Una aplicación de trading financiero necesita block storage por su naturaleza transaccional y requerimiento de latencia mínima.
+
+---
+
+### Diferencia entre los dos FSx para Windows
+
+```
+FSx for Windows File Server      FSx for NetApp ONTAP
+───────────────────────          ────────────────────
+Solo protocolo SMB               SMB + NFS + iSCSI
+Solo file storage                File + Block storage
+Exclusivo para Windows           Multi-OS (Win, Linux, Mac)
+Sin iSCSI                        iSCSI nativo ✅
+```
+
+---
+
+### Regla mental para el examen
+
+> - **Block storage + Multi-AZ + Windows + iSCSI** → **FSx for NetApp ONTAP**
+> - **"iSCSI"** en el enunciado → señal directa hacia NetApp ONTAP
+> - **File storage compartido solo para Windows** → **FSx for Windows File Server**
+> - **File storage para Linux/multi-OS** → **EFS**
+> - **Object storage escalable** → **S3**
 
 &nbsp;   
 
