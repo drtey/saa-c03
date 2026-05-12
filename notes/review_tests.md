@@ -5543,3 +5543,1492 @@ Sin iSCSI                        iSCSI nativo ✅
 &nbsp;   
 
 &nbsp;
+
+---
+
+## Respuesta: RAM + Organizations para gestión centralizada multi-cuenta
+
+**Categoría:** Design High-Performing Architectures
+
+**Escenario clave:** Empresa global con múltiples cuentas AWS quiere gestión centralizada, adquisición central de recursos y compartir Transit Gateways, License Manager configurations y Route 53 Resolver rules.
+
+**Respuestas correctas:**
+- **AWS Organizations** → consolida todas las cuentas en una organización gestionable centralmente
+- **AWS Resource Access Manager (RAM)** → comparte recursos (Transit Gateways, subnets, License Manager configs, Route 53 Resolver rules) entre cuentas sin duplicarlos
+
+### Por qué las otras opciones fallan
+
+| Opción | Por qué es incorrecta |
+|---|---|
+| **IAM cross-account access** | Funciona, pero es tedioso y con alto overhead operacional — hay que configurarlo manualmente para cada cuenta |
+| **AWS Control Tower** | Gobierna y estandariza la creación de cuentas, pero **no comparte recursos** entre cuentas |
+| **AWS ParallelCluster** | Herramienta open-source para clusters HPC (High-Performance Computing) — no tiene nada que ver con gestión de cuentas |
+
+### Regla mental para el examen
+
+> - **Compartir recursos entre cuentas (Transit GW, subnets, License Manager, Route 53 rules)** → **RAM**
+> - **Consolidar y gestionar múltiples cuentas** → **AWS Organizations**
+> - **RAM + Organizations** = combo clásico para escenarios multi-cuenta centralizados
+> - RAM no tiene coste adicional; pagas solo por los recursos compartidos
+> - IAM cross-account es válido pero RAM es la respuesta preferida por menor overhead
+
+&nbsp;   
+
+&nbsp;
+
+---
+
+## Respuesta: AWS Artifact para reportes de compliance
+
+**Categoría:** Design Secure Architectures
+
+**Escenario clave:** El equipo de auditoría necesita acceder a documentos de cumplimiento normativo (SOC, PCI, ISO) de sus servicios AWS.
+
+**Respuesta correcta:** **AWS Artifact** → recurso central y on-demand para reportes de seguridad y compliance de AWS.
+
+**Qué ofrece AWS Artifact:**
+- Reportes: SOC, PCI, certificaciones ISO, acreditaciones regionales
+- Acuerdos: Business Associate Addendum (BAA), Non-Disclosure Agreement (NDA)
+- Acceso disponible para todas las cuentas AWS (root e IAM admins sin configuración extra)
+
+### Por qué las otras opciones fallan
+
+| Opción | Por qué es incorrecta |
+|---|---|
+| **Amazon Inspector** | Detecta vulnerabilidades en workloads AWS — no descarga reportes de compliance |
+| **Amazon Macie** | Protege datos sensibles en S3 — no genera ni almacena reportes de compliance |
+| **AWS Security Hub** | Vista centralizada de alertas de seguridad — no contiene documentos de compliance de AWS |
+| **ACM (Certificate Manager)** | Gestiona certificados SSL/TLS — no almacena certificaciones ni documentos de compliance |
+
+### Regla mental para el examen
+
+> - **Reportes de compliance de AWS (SOC, PCI, ISO)** → **AWS Artifact**
+> - **Vulnerabilidades en instancias/aplicaciones** → **Amazon Inspector**
+> - **Datos sensibles en S3** → **Amazon Macie**
+> - **Postura de seguridad centralizada** → **AWS Security Hub**
+
+&nbsp;   
+
+&nbsp;
+
+---
+
+## Respuesta: API Gateway + Lambda para bursts de tráfico en segundos
+
+**Categoría:** Design High-Performing Architectures
+
+**Escenario clave:** Aplicación con tráfico bajo la mayor parte del tiempo pero con bursts repentinos en segundos (anuncios de producto). Acceso global via API.
+
+**Respuesta correcta:** **Amazon API Gateway + AWS Lambda**
+
+**Por qué Lambda es la opción correcta:**
+- Escala en **segundos** (no minutos) — puede alcanzar concurrencia inicial de 500–3000 instancias por región
+- Sin servidores que provisionar — AWS gestiona el escalado automáticamente
+- Pago por uso: ideal para tráfico irregular/bajo con picos puntuales
+- Burst inicial: Lambda absorbe picos durante ~15-30 minutos sin configuración extra
+
+### Por qué las otras opciones fallan
+
+| Opción | Por qué es incorrecta |
+|---|---|
+| **EC2 Auto Scaling** | Lanzar nuevas instancias EC2 tarda **minutos**, no segundos |
+| **Elastic Beanstalk + Auto Scaling** | Usa EC2 internamente — mismo problema de minutos para escalar |
+| **ECS + Service Auto Scaling** | También requiere minutos para aprovisionar nuevos tasks/instancias |
+
+### Regla mental para el examen
+
+> - **Burst de tráfico en segundos + API + sin gestión de servidores** → **API Gateway + Lambda**
+> - **Lambda escala en segundos; EC2/ECS/Beanstalk Auto Scaling escala en minutos**
+> - Tráfico irregular o esporádico → Lambda es más económico (pago por invocación)
+> - Señales clave: "burst within seconds", "global users", "low activity most of the time"
+
+&nbsp;   
+
+&nbsp;
+
+---
+
+## Respuesta: Scheduled Scaling para picos de tráfico predecibles
+
+**Categoría:** Design High-Performing Architectures
+
+**Escenario clave:** Aplicación lenta al inicio del día (9am-5pm de uso intensivo). ASG con instancias EC2 de **diferentes tipos y tamaños**.
+
+**Respuesta correcta:** **Scheduled Scaling** → escala antes del inicio del día, garantizando instancias listas cuando llegan los usuarios.
+
+### Por qué las otras opciones fallan
+
+| Opción | Por qué es incorrecta |
+|---|---|
+| **Dynamic scaling (CPU)** | Reactivo — escala *después* de que la CPU suba, cuando el problema ya existe |
+| **Dynamic scaling (Memory)** | Igual de reactivo + CloudWatch no monitoriza memoria por defecto en EC2 |
+| **Predictive scaling** | Asume un ASG **homogéneo** (todas las instancias de igual capacidad) — con instancias de distintos tipos/tamaños la previsión es imprecisa |
+
+### Regla mental para el examen
+
+> - **Tráfico predecible por horario fijo** → **Scheduled Scaling** (escala *antes* del pico)
+> - **Predictive Scaling requiere ASG homogéneo** — falla si hay mezcla de instance types/sizes
+> - Dynamic scaling es reactivo: espera a que la métrica suba → siempre llega tarde a picos conocidos
+> - Señal clave: "slow at the start of the day" + horario conocido → Scheduled, no Dynamic
+
+&nbsp;   
+
+&nbsp;
+
+---
+
+## Respuesta: EFS para almacenamiento compartido POSIX en múltiples instancias
+
+**Categoría:** Design High-Performing Architectures
+
+**Escenario clave:** Fleet de EC2 con Auto Scaling almacenando documentos en EBS. Rendimiento lento. Se necesita sistema de ficheros compartido, escalable, altamente disponible y POSIX-compliant.
+
+**Respuesta correcta:** **Amazon EFS** → file system compartido, multi-AZ, montable simultáneamente en múltiples instancias EC2.
+
+**Por qué EFS es la opción correcta:**
+- Múltiples EC2 acceden concurrentemente al mismo sistema de ficheros
+- Abarca múltiples Availability Zones (alta disponibilidad)
+- POSIX-compliant: interfaz de ficheros estándar con file locking
+- Elástico: escala automáticamente sin aprovisionar capacidad
+
+### Por qué las otras opciones fallan
+
+| Opción | Por qué es incorrecta |
+|---|---|
+| **EBS Provisioned IOPS** | EBS se adjunta a **una sola instancia** (o varias dentro de la misma AZ con Multi-Attach) — no es shared storage multi-AZ |
+| **Amazon S3** | Object storage, no file storage — no proporciona interfaz POSIX ni file locking (necesario para CMS) |
+| **ElastiCache** | In-memory cache — no es almacenamiento de ficheros |
+
+### Regla mental para el examen
+
+> - **File storage compartido + multi-AZ + múltiples EC2 + POSIX** → **Amazon EFS**
+> - **EBS** = block storage, una instancia (mismo AZ); no es shared entre instancias en distintas AZs
+> - **S3** = object storage; no cumple requisitos de file system (POSIX, file locking)
+> - Señales clave: "shared file system", "concurrent access", "POSIX-compliant", "fleet of EC2"
+
+&nbsp;   
+
+&nbsp;
+
+---
+
+## Respuesta: Client-side encryption con client-side master key
+
+**Categoría:** Design Secure Architectures
+
+**Escenario clave:** Datos PII sensibles en S3. **Ni las master keys ni los datos sin cifrar deben enviarse nunca a AWS.**
+
+**Respuesta correcta:** **S3 client-side encryption con client-side master key**
+
+**Cómo funciona:**
+1. El cliente genera una clave de datos (DEK) aleatoria localmente
+2. Usa la DEK para cifrar el objeto localmente
+3. Cifra la DEK con tu master key (que nunca sale del cliente)
+4. Sube a S3: el objeto ya cifrado + la DEK cifrada como metadata (`x-amz-meta-x-amz-key`)
+5. AWS nunca ve ni la master key ni los datos en claro
+
+### Comparativa de opciones de cifrado S3
+
+| Opción | ¿Quién cifra? | ¿Master key llega a AWS? | ¿Datos en claro llegan a AWS? |
+|---|---|---|---|
+| **Client-side + client master key** | Cliente | ❌ Nunca | ❌ Nunca |
+| **Client-side + KMS key** | Cliente | ✅ Sí (KeyId enviado a KMS) | ❌ No |
+| **SSE-KMS** | AWS | ✅ Sí (gestionada por AWS) | ✅ Sí |
+| **SSE-C (customer-provided key)** | AWS | ✅ Sí (enviada en cada request) | ✅ Sí |
+
+### Regla mental para el examen
+
+> - **"Nunca enviar master key NI datos en claro a AWS"** → **Client-side encryption + client-side master key**
+> - **Client-side + KMS**: datos no llegan en claro, pero el KeyId sí se envía a KMS
+> - **SSE-C**: tú provees la clave, pero AWS la recibe y cifra en su lado (datos llegan en claro)
+> - **SSE-KMS**: todo gestionado por AWS — viola ambos requisitos del escenario
+> - Señal clave: "master keys never sent to AWS" + "unencrypted data never sent to AWS" → client-side master key
+
+&nbsp;   
+
+&nbsp;
+
+---
+
+## Respuesta: ALB público + EC2/Aurora privados + AWS Network Firewall para filtrado FQDN
+
+**Categoría:** Design Secure Architectures
+
+**Escenario clave:** Web de 3 capas con enfoque defense-in-depth. Requisitos: filtrar URLs maliciosas y bloquear FQDNs en lista negra. Mínimos recursos necesarios.
+
+**Respuesta correcta:**
+- ALB en **subred pública**
+- Auto Scaling EC2 + Aurora Serverless en **subredes privadas**
+- **AWS Network Firewall** con firewall policy para bloquear URLs maliciosas y FQDNs
+- Redirigir el tráfico VPC a través de los firewall endpoints
+
+**Por qué Network Firewall:** Soporta inspección stateful de tráfico con listas de dominio (Allow/Deny por FQDN) y filtrado de URLs maliciosas mediante reglas Suricata-compatible.
+
+### Por qué las otras opciones fallan
+
+| Opción | Por qué es incorrecta |
+|---|---|
+| **ALB + NAT GW + Network Firewall integrado directo en ALB** | No se puede integrar Network Firewall directamente con ALB. NAT GW tampoco es necesario para que funcione la app (solo para salida de instancias privadas a internet) |
+| **ALB + NAT GW en público + NAT GW filtra FQDNs** | NAT Gateway **no tiene capacidad de filtrado** de FQDNs ni URLs maliciosas |
+| **Todo en subred pública + host-based routing en ALB** | No sigue el enfoque por capas; Aurora expuesta en red pública. ALB host-based routing no filtra URLs maliciosas ni FQDNs — eso requiere Network Firewall |
+
+### Regla mental para el examen
+
+> - **Filtrar URLs maliciosas + bloquear FQDNs en VPC** → **AWS Network Firewall** (no WAF, no NAT GW, no ALB routing)
+> - **Defense-in-depth / layered approach**: ALB en público, EC2 en privado, DB en privado más restrictivo
+> - **NAT Gateway** = salida a internet para recursos privados — no filtra, no inspecciona tráfico
+> - **Network Firewall NO se integra directamente con ALB** — se integra a nivel de VPC mediante firewall endpoints
+> - Señales clave: "malicious URLs", "blacklisted FQDNs", "layered approach" → **Network Firewall**
+
+&nbsp;   
+
+&nbsp;
+
+---
+
+## Respuesta: Amazon DLM para backup automatizado de EBS
+
+**Categoría:** Design Resilient Architectures
+
+**Escenario clave:** Backup automatizado de todos los EBS volumes. Requisitos: rápido de implementar, cost-effective, simple de mantener.
+
+**Respuesta correcta:** **Amazon Data Lifecycle Manager (DLM)** → automatiza creación, retención y eliminación de snapshots EBS sin scripts ni jobs adicionales. Sin coste adicional.
+
+### Por qué las otras opciones fallan
+
+| Opción | Por qué es incorrecta |
+|---|---|
+| **CLI `create-snapshot` + scheduled job** | Válido, pero requiere tiempo adicional para crear y mantener el job — DLM lo hace out-of-the-box |
+| **AWS Backup con retention rule** | Solución de backup centralizada multi-servicio — más compleja y no la más directa para solo EBS snapshots |
+| **Storage Gateway → on-premises** | Storage Gateway es para backup de on-premises hacia AWS, no al revés |
+
+### Regla mental para el examen
+
+> - **Automatizar snapshots EBS de forma simple y sin coste extra** → **Amazon DLM**
+> - **DLM** = políticas de ciclo de vida: crear + retener + eliminar snapshots automáticamente
+> - **AWS Backup** = centralizado multi-servicio (EC2, RDS, EFS, DynamoDB…) — más potente pero más overhead
+> - **Storage Gateway** = siempre conecta on-premises con AWS, nunca al revés
+> - Señales clave: "automated backup", "EBS volumes", "cost-effective", "simple to maintain" → **DLM**
+
+&nbsp;   
+
+&nbsp;
+
+---
+
+## Respuesta: DataSync + S3 + Object Lock para migración con inmutabilidad
+
+**Categoría:** Design Secure Architectures
+
+**Escenario clave:** Migrar registros financieros de on-premises a la nube. El on-premises dejará de usarse. Los datos no deben poder borrarse ni sobreescribirse.
+
+**Respuesta correcta:** **AWS DataSync** (migración) + **Amazon S3** + **S3 Object Lock** (WORM)
+
+**Por qué esta combinación:**
+- DataSync: migración masiva one-time desde on-premises a S3
+- S3 Object Lock: modelo WORM (Write-Once-Read-Many) — impide borrado y sobreescritura
+- No se necesita acceso híbrido continuo → Storage Gateway descartado
+
+### Por qué las otras opciones fallan
+
+| Opción | Por qué es incorrecta |
+|---|---|
+| **Storage Gateway + S3 + Object Lock** | Storage Gateway es para acceso híbrido continuo — el escenario no lo requiere (on-premises ya no se usará) |
+| **DataSync + EFS + Object Lock** | **Object Lock es exclusivo de S3** — EFS solo tiene file locking, no Object Lock |
+| **Storage Gateway + EBS + Object Lock** | EBS no soporta Object Lock. Además, mismo problema de Storage Gateway innecesario |
+
+### Regla mental para el examen
+
+> - **Object Lock (WORM) = solo Amazon S3** — ni EFS, ni EBS, ni ningún otro servicio
+> - **Migración completa one-time desde on-premises** → **DataSync** (no Storage Gateway)
+> - **Storage Gateway** = on-premises sigue activo y necesita acceso híbrido continuo
+> - **DataSync** = on-premises se abandona o la transferencia es puntual/periódica
+> - Señales clave: "prevent deletion or overwriting" + "migrate" → **DataSync + S3 + Object Lock**
+
+&nbsp;   
+
+&nbsp;
+
+---
+
+## Respuesta: Características válidas de EBS (dos correctas)
+
+**Categoría:** Design Resilient Architectures
+
+**Respuestas correctas:**
+- **EBS persiste independientemente del ciclo de vida de la instancia** (off-instance storage)
+- **EBS soporta cambios de configuración en vivo** sin interrupciones (tipo, tamaño, IOPS)
+
+### Afirmaciones falsas y por qué
+
+| Afirmación incorrecta | La realidad |
+|---|---|
+| "Replicado en una **región** separada" | EBS se replica dentro de la **misma Availability Zone**, no en otra región |
+| "Puede adjuntarse a cualquier EC2 en **cualquier AZ**" | Solo puede adjuntarse a instancias EC2 en la **misma AZ** |
+| "Snapshots se almacenan en **Amazon RDS**" | Los snapshots EBS se almacenan en **Amazon S3** (gestionados internamente, no directamente accesibles en S3) |
+
+### Resumen de hechos clave de EBS para el examen
+
+> - Replicación: **dentro de la AZ** (no cross-AZ, no cross-region)
+> - Adjuntar: solo instancias en la **misma AZ**
+> - Multi-Attach: solo volúmenes **io1/io2** y solo en instancias Nitro de la misma AZ
+> - Snapshots → **S3** (redundante multi-AZ), no RDS
+> - Persiste tras terminar la instancia (configurable)
+> - Cambios en vivo: tipo, tamaño e IOPS sin downtime
+> - SLA: **99.999%**
+
+&nbsp;   
+
+&nbsp;
+
+---
+
+## Respuesta: SQS + SWF para arquitectura desacoplada híbrida (on-premises + EC2)
+
+**Categoría:** Design High-Performing Architectures
+
+**Escenario clave:** Arquitectura desacoplada que usa tanto servidores on-premises como instancias EC2.
+
+**Respuestas correctas:**
+- **Amazon SQS** → colas de mensajes para desacoplar componentes distribuidos (on-premises y EC2)
+- **Amazon SWF** → coordinación de trabajo entre componentes distribuidos (on-premises y EC2)
+
+### Por qué las otras opciones fallan
+
+| Opción | Por qué es incorrecta |
+|---|---|
+| **RDS** | Servicio de base de datos — no es una herramienta de desacoplamiento |
+| **DynamoDB** | Servicio de base de datos — no desacopla componentes |
+| **VPC Peering** | Solo conecta dos VPCs de AWS — **no puede usarse con redes on-premises** |
+
+### Regla mental para el examen
+
+> - **Decoupled architecture en AWS** → **SQS** (mensajería) y/o **SWF** (coordinación de workflows)
+> - **VPC Peering** = solo entre VPCs de AWS, nunca con on-premises (para on-premises usar VPN o Direct Connect)
+> - RDS/DynamoDB son bases de datos — nunca son la respuesta para "desacoplar" componentes
+> - Señal clave: "decoupled", "distributed components", "on-premises + EC2" → SQS o SWF
+
+&nbsp;   
+
+&nbsp;
+
+---
+
+## Respuesta: Organizations + IAM Identity Center para gestión multi-cuenta con directorio corporativo
+
+**Categoría:** Design Secure Architectures
+
+**Escenario clave:** Múltiples cuentas AWS. Se necesita arquitectura consolidada multi-cuenta + autenticación centralizada con directorio corporativo.
+
+**Respuestas correctas:**
+- **AWS Organizations** → arquitectura multi-cuenta consolidada con gestión y visión centralizadas
+- **AWS IAM Identity Center** integrado con el directorio corporativo (AD) → SSO centralizado entre cuentas + SCPs para control de políticas
+
+### Por qué las otras opciones fallan
+
+| Opción | Por qué es incorrecta |
+|---|---|
+| **AWS Directory Service directo en Organizations** | Directory Service gestiona directorios (AD), no está diseñado para autenticación multi-cuenta. No sustituye a IAM Identity Center |
+| **Amazon Cognito + IAM Identity Center** | Cognito es para identidades de aplicaciones/web (usuarios externos, social login) — no para integrar directorios corporativos en entornos multi-cuenta |
+| **AWS CloudTrail** | Registra API calls y eventos para auditoría/compliance — no implementa arquitectura multi-cuenta ni autenticación |
+
+### Regla mental para el examen
+
+> - **Multi-cuenta + gestión centralizada** → **AWS Organizations**
+> - **SSO con directorio corporativo (AD) entre cuentas** → **AWS IAM Identity Center**
+> - **SCPs** = políticas de control de servicios aplicadas a nivel de organización/OU
+> - **Cognito** = identidades para apps y usuarios externos, no para empleados corporativos con AD
+> - **Directory Service** = gestiona el directorio AD en AWS, pero no hace SSO multi-cuenta por sí solo
+> - **CloudTrail** = auditoría y logging, nunca gestión de cuentas o autenticación
+> - **Organizations NO tiene "external authentication"** propia — para autenticar con AD externo se usa IAM Identity Center
+> - **SCPs no son necesarias para el login** — son políticas de control de servicios, no de autenticación
+> - Para integrar AD corporativo on-premises con IAM Identity Center → **AD Connector** (proxy al AD existente sin almacenar datos en la nube)
+> - Para unir cuentas existentes: **crear org en master account + invitar child accounts**
+
+&nbsp;   
+
+&nbsp;
+
+---
+
+## Respuesta: RDS Proxy para el error "too many connections" con Lambda
+
+**Categoría:** Design Cost-Optimized Architectures
+
+**Escenario clave:** Aplicación serverless (Lambda + API Gateway) conectada a RDS MySQL. Durante picos de carga aparece el error "too many connections".
+
+**Respuesta correcta:** **Provisionar RDS Proxy** entre Lambda y RDS.
+
+**Por qué ocurre el problema:** Lambda escala a miles de ejecuciones concurrentes, cada una abriendo una nueva conexión a la base de datos. RDS tiene un límite de conexiones determinado por la memoria de la instancia.
+
+**Cómo lo resuelve RDS Proxy:**
+- Mantiene un **connection pool** (warm connections) a la base de datos
+- Las funciones Lambda se conectan al proxy, que reutiliza conexiones existentes
+- Evita abrir/cerrar una conexión por cada invocación de Lambda
+
+### Por qué las otras opciones fallan
+
+| Opción | Por qué es incorrecta |
+|---|---|
+| **Aumentar concurrency limit de Lambda** | Permite más invocaciones simultáneas → **empeora** el problema (más conexiones) |
+| **Aumentar rate limit de API Gateway** | Solo controla el número de requests de API — no afecta las conexiones a la DB |
+| **Aumentar memoria de Lambda** | Acelera la ejecución de Lambda, pero no reduce el número de conexiones a RDS |
+
+### Regla mental para el examen
+
+> - **"Too many connections" + Lambda + RDS** → **RDS Proxy**
+> - RDS Proxy = connection pooling para entornos serverless con muchas conexiones concurrentes
+> - Aumentar concurrency de Lambda sin RDS Proxy empeora el problema
+> - Señal clave: error de conexiones en DB + arquitectura serverless → **RDS Proxy**
+
+&nbsp;   
+
+&nbsp;
+
+---
+
+## Respuesta: CloudWatch + SNS para monitorización de métricas con notificaciones email
+
+**Categoría:** Design Resilient Architectures
+
+**Escenario clave:** Monitorizar métricas de base de datos y enviar notificaciones email al equipo de operaciones si hay problemas.
+
+**Respuestas correctas:**
+- **Amazon CloudWatch** → monitoriza métricas (DB, EC2, logs, eventos) y dispara alarmas
+- **Amazon SNS** → envía notificaciones (email, SMS, HTTP…) cuando CloudWatch activa una alarma
+
+### Por qué las otras opciones fallan
+
+| Opción | Por qué es incorrecta |
+|---|---|
+| **Amazon SES** | Diseñado para emails bulk/transaccionales/marketing — no para notificaciones de sistema. Para monitorización usar SNS |
+| **Amazon SQS** | Cola de mensajes — no monitoriza recursos ni envía emails |
+| **EC2 + BIND Server** | BIND es un servidor DNS — no monitoriza aplicaciones ni envía notificaciones |
+
+### Regla mental para el examen
+
+> - **Monitorizar métricas + alertas** → **Amazon CloudWatch**
+> - **Notificaciones de sistema (alarmas, eventos AWS)** → **Amazon SNS** (no SES)
+> - **SES** = emails transaccionales/marketing para usuarios finales; **SNS** = pub/sub para sistemas y operaciones
+> - CloudWatch Alarm → SNS Topic → email al equipo ops es el patrón estándar
+
+&nbsp;   
+
+&nbsp;
+
+---
+
+## Respuesta: ASG multi-AZ + DMS para migrar NoSQL embebido a DynamoDB
+
+**Categoría:** Design High-Performing / Resilient Architectures
+
+**Escenario clave:** Aplicación en EC2 con base de datos NoSQL embebida. Se necesita alta disponibilidad con bajo overhead operacional.
+
+**Respuesta correcta:**
+- **Auto Scaling group distribuido en 3 Availability Zones** → alta disponibilidad de la capa de aplicación
+- **AWS DMS con replication server + ongoing replication task** → migrar la NoSQL embebida a **Amazon DynamoDB**
+
+**Por qué DMS puede migrar a DynamoDB:** DMS soporta como destino DynamoDB cuando el origen es una base de datos relacional o MongoDB.
+
+### Por qué las otras opciones fallan
+
+| Opción | Por qué es incorrecta |
+|---|---|
+| **NLB + Global Accelerator + replicar NoSQL en EC2** | No se recomienda producción con DB embebida en EC2 — más overhead. Global Accelerator innecesario en una sola región |
+| **NLB + Glue DynamoDB export connector** | Glue export connector es para analytics (exportar DynamoDB → S3), no para migrar la DB de la app |
+| **ASG multi-AZ + replicar NoSQL en EC2 manualmente** | Posible pero con alto overhead operacional de mantener replicación manual |
+
+### Regla mental para el examen
+
+> - **NoSQL embebida en EC2 + alta disponibilidad + bajo overhead** → migrar a **DynamoDB via DMS**
+> - **DMS** soporta destino DynamoDB con origen relacional o MongoDB
+> - DB en EC2 = siempre overhead: parchear, escalar, replicar manualmente
+> - **Global Accelerator** = multi-región; si el escenario es una sola región, no aplica
+> - Señal clave: "low operational overhead" + DB en EC2 → mover a servicio gestionado AWS
+
+&nbsp;   
+
+&nbsp;
+
+---
+
+## Respuesta: CloudWatch Agent para métricas custom (SwapUtilization)
+
+**Categoría:** Design Resilient Architectures
+
+**Escenario clave:** Instancias EC2 fallando por falta de swap space. Se necesita monitorizar `SwapUtilization` de cada instancia.
+
+**Respuesta correcta:** **Instalar CloudWatch Agent** en cada instancia y monitorizar la métrica `SwapUtilization`.
+
+**Por qué se necesita el agente:** Las métricas de memoria y swap **no están disponibles por defecto** en CloudWatch — son métricas del SO, no de la infraestructura AWS. El CloudWatch Agent las recoge y publica como métricas custom.
+
+### Por qué las otras opciones fallan
+
+| Opción | Por qué es incorrecta |
+|---|---|
+| **Habilitar detailed monitoring** | Detailed monitoring aumenta la frecuencia (1 min) de las métricas **por defecto** de EC2 — no añade métricas de memoria/swap |
+| **CloudWatch dashboard + SwapUsed** | El dashboard puede mostrarla, pero primero hay que instalar el agente para que la métrica exista |
+| **CloudTrail + CloudWatch Logs** | CloudTrail registra llamadas a la API de AWS — no monitoriza métricas del SO como swap |
+
+### Regla mental para el examen
+
+> - **Métricas de memoria, swap, disco (uso)** = **NO están en CloudWatch por defecto** → requieren **CloudWatch Agent**
+> - **Detailed monitoring** = más frecuencia (5 min → 1 min) de métricas ya existentes, no métricas nuevas
+> - **CloudTrail** = auditoría de API calls, nunca métricas de rendimiento del SO
+> - Señales clave: "memory", "swap", "disk utilization" en EC2 → siempre **CloudWatch Agent**
+
+&nbsp;   
+
+&nbsp;
+
+---
+
+## Respuesta: AWS Config para auditar configuraciones y hacer cumplir compliance
+
+**Categoría:** Design Secure Architectures
+
+**Escenario clave:** Auditar configuraciones en AWS, rastrear cambios en S3 buckets e identificar automáticamente buckets públicos.
+
+**Respuesta correcta:** **AWS Config** → monitoriza y registra configuraciones de recursos, evalúa reglas de compliance continuamente.
+
+**Qué hace AWS Config:**
+- Registra el historial de configuraciones de recursos AWS
+- Permite crear **Config Rules** para evaluar si los recursos cumplen las políticas deseadas
+- Dashboard de compliance: qué recursos cumplen vs cuáles no
+- Detecta automáticamente cambios de configuración (ej: bucket S3 que pasa a público)
+
+### Por qué las otras opciones fallan
+
+| Opción | Por qué es incorrecta |
+|---|---|
+| **AWS Trusted Advisor** | Ofrece recomendaciones de buenas prácticas — no define reglas ni evalúa compliance continuo |
+| **IAM Credential Report** | Lista los usuarios IAM y estado de sus credenciales — no evalúa configuraciones de recursos |
+| **AWS CloudTrail** | Registra el historial de API calls (quién hizo qué) — no define reglas ni hace cumplir políticas |
+
+### Regla mental para el examen
+
+> - **Auditar + evaluar configuraciones de recursos + compliance rules** → **AWS Config**
+> - **CloudTrail** = historial de API calls (auditoría de acciones); **Config** = historial de configuraciones (auditoría de estado)
+> - **Trusted Advisor** = recomendaciones de buenas prácticas, no enforcement
+> - Señales clave: "track configuration changes", "compliance", "automatically identify" recursos no conformes → **AWS Config**
+
+&nbsp;   
+
+&nbsp;
+
+---
+
+## Respuesta: Características clave de Amazon API Gateway
+
+**Categoría:** Design Resilient Architectures
+
+**Respuestas correctas:**
+- **Pago por uso**: solo pagas por las API calls recibidas y los datos transferidos (sin mínimo ni coste de arranque)
+- **Soporta RESTful APIs y WebSocket APIs** optimizadas para workloads serverless (con Lambda)
+
+### Distractores y a qué servicio pertenecen realmente
+
+| Afirmación | Servicio real |
+|---|---|
+| "Static anycast IP como entry point a aplicaciones en múltiples regiones" | **AWS Global Accelerator** |
+| "Query language similar a GraphQL para APIs" | No es una característica de API Gateway |
+| "Inter-node communications a escala con OS bypass hardware interface" | **Elastic Fabric Adapter (EFA)** |
+
+### Regla mental para el examen
+
+> - **API Gateway** = RESTful + WebSocket, pago por uso, gestión de tráfico/auth/monitorización
+> - **Global Accelerator** = anycast IPs estáticas, entry point global multi-región
+> - **EFA (Elastic Fabric Adapter)** = HPC, inter-node communications de alta velocidad con OS bypass
+> - API Gateway **no genera query languages ni tiene capacidades de GraphQL**
+
+&nbsp;   
+
+&nbsp;
+
+---
+
+## Respuesta: CloudFront + Lambda@Edge para servir formatos de imagen según User-Agent
+
+**Categoría:** Design High-Performing Architectures
+
+**Escenario clave:** Servir WebP a user agents que lo soporten y JPEG al resto. Añadir custom header en la respuesta. Mínimo overhead operacional.
+
+**Respuesta correcta:** **CloudFront behaviors + Lambda@Edge** → interceptar request/response en el edge, leer el `User-Agent` header y servir el formato adecuado + inyectar headers custom.
+
+**Por qué Lambda@Edge:** Ejecuta código directamente en los edge locations de CloudFront. Puede modificar requests y responses (headers, body, formato) sin servidores adicionales.
+
+### Por qué las otras opciones fallan
+
+| Opción | Por qué es incorrecta |
+|---|---|
+| **CloudFront response headers policy** | Solo controla qué headers HTTP incluir/excluir en las respuestas — no puede seleccionar dinámicamente el formato de imagen según User-Agent |
+| **Múltiples distribuciones CloudFront + Route 53** | Innecesario y aumenta el overhead operacional — Lambda@Edge resuelve esto en una sola distribución |
+| **EC2 image conversion service + Lambda** | Requiere gestionar instancias EC2 adicionales — mayor overhead; Lambda@Edge en el edge es la solución más eficiente |
+
+### Regla mental para el examen
+
+> - **Lógica dinámica en el edge de CloudFront** (modificar headers, seleccionar contenido por User-Agent, A/B testing) → **Lambda@Edge**
+> - **CloudFront response headers policy** = headers estáticos predefinidos, no lógica dinámica
+> - Lambda@Edge puede interceptar: Viewer Request, Origin Request, Origin Response, Viewer Response
+> - Señales clave: "User-Agent", "custom headers", "dynamic content at edge", "minimize overhead" → **Lambda@Edge**
+
+&nbsp;   
+
+&nbsp;
+
+---
+
+## Respuesta: Fault Tolerance en Direct Connect — VPC Peering no extiende conexiones (edge-to-edge routing)
+
+**Categoría:** Design Secure Architectures
+
+**Escenario clave:** VPC-1 (privada) ↔ VPC-2 (pública) con peering. DX conecta on-premises a VPC-1. Se necesita aumentar fault tolerance hacia VPC-1.
+
+**Respuestas correctas:**
+- **Hardware VPN sobre internet entre VPC-1 y on-premises** → segunda ruta de acceso redundante
+- **Otro AWS Direct Connect + private virtual interface en la misma región que VPC-1** → segunda conexión DX dedicada
+
+### Regla crítica: VPC Peering NO soporta edge-to-edge routing
+
+VPC Peering es una relación **uno a uno** entre entidades directamente conectadas. Las siguientes conexiones **no se extienden** a través de un peering:
+- VPN connection o Direct Connect hacia la red corporativa
+- Internet gateway
+- NAT device
+- Gateway VPC Endpoint
+
+**En la práctica:** El tráfico on-premises que llega a VPC-1 via DX **no puede llegar a VPC-2** a través del peering, y viceversa — tráfico desde VPC-2 no puede salir hacia on-premises usando la conexión DX de VPC-1.
+
+### Por qué las otras opciones fallan
+
+| Opción | Por qué es incorrecta |
+|---|---|
+| **VPN entre VPC-2 y on-premises** | VPC Peering no extiende la conexión — el tráfico on-premises → VPC-2 → peering → VPC-1 no funciona |
+| **Nuevo DX en la misma región que VPC-2** | Mismo problema: no se puede enrutar transitivament hacia VPC-1 a través del peering |
+| **VPN CloudHub con DX en región de VPC-2** | VPN CloudHub conecta múltiples sitios via VPN, no resuelve el edge-to-edge routing hacia VPC-1 |
+
+### Regla mental para el examen
+
+> - **VPC Peering = no transitivo + no edge-to-edge** — VPN/DX de un VPC no se extiende al otro VPC del peering
+> - Para fault tolerance de Direct Connect: **VPN como backup** + **segundo DX en la misma región** que el VPC objetivo
+> - Cualquier solución que intente usar VPC-2 como intermediario para llegar a VPC-1 → incorrecta
+> - Señal clave: "increase fault tolerance" + "Direct Connect" → **VPN backup + segundo DX** (ambos directos a VPC-1)
+
+&nbsp;   
+
+&nbsp;
+
+---
+
+## Respuesta: DynamoDB Gateway Endpoint + AWS Backup para cross-account
+
+**Categoría:** Design Secure Architectures
+
+**Escenario clave:** EKS + DynamoDB en VPC. Requisito 1: evitar que llamadas a DynamoDB crucen internet. Requisito 2: backup cross-account automatizado de DynamoDB.
+
+**Respuesta correcta:**
+- **DynamoDB Gateway Endpoint** → tráfico VPC ↔ DynamoDB permanece dentro de la red de Amazon (IPs privadas, sin internet)
+- **AWS Backup** → copia backups on-demand de DynamoDB a otra cuenta/región (PITR no soporta esto)
+
+**Cómo funciona el Gateway Endpoint:**
+1. Se especifica el VPC y la route table asociada
+2. La route table se actualiza con el DynamoDB prefix list como destino y el endpoint ID como target
+3. Las instancias/pods usan IPs privadas para acceder a DynamoDB sin pasar por IGW
+
+### Por qué las otras opciones fallan
+
+| Opción | Por qué es incorrecta |
+|---|---|
+| **Interface endpoint para DynamoDB** | DynamoDB usa **Gateway endpoint** (no Interface). Interface endpoint = servicios via PrivateLink (ENI en subnet) |
+| **PITR para cross-account backup** | PITR solo restaura en la **misma cuenta y región** — no soporta cross-account |
+| **NACL para controlar tráfico al endpoint** | NACL no reemplaza al endpoint — el tráfico sigue pasando por internet sin el endpoint. Los NACLs son stateless y no entienden endpoints de servicio |
+| **DynamoDB on-demand backups directo cross-account** | Los on-demand backups de DynamoDB **no se pueden copiar** a diferente cuenta o región nativamente |
+| **Timestream para PITR cross-account** | Timestream = time series DB para IoT/métricas — no tiene ninguna relación con backup de DynamoDB |
+
+### Regla mental para el examen
+
+> - **DynamoDB sin pasar por internet en VPC** → **Gateway Endpoint** (no Interface Endpoint)
+> - **S3 y DynamoDB** = únicos servicios con **Gateway Endpoint** (gratuito, en route table)
+> - Todos los demás servicios AWS = **Interface Endpoint** (ENI, PrivateLink, coste por hora)
+> - **PITR** = restaurar DynamoDB a un punto en el tiempo, **misma cuenta y región** únicamente
+> - **AWS Backup** = cross-account + cross-region + retención long-term + cold storage para DynamoDB
+> - **DynamoDB on-demand backups** no soportan cross-account nativamente → usar **AWS Backup**
+
+&nbsp;   
+
+&nbsp;
+
+---
+
+## Respuesta: Cost Allocation Tags para reportes de gasto por departamento
+
+**Categoría:** Design Cost-Optimized Architectures
+
+**Escenario clave:** Generar reporte mensual del gasto total de AWS agrupado por departamento.
+
+**Respuesta correcta:** **Taggear recursos con el nombre del departamento + activar Cost Allocation Tags** en la consola de Billing and Cost Management → AWS genera reporte CSV con costes agrupados por tags activos.
+
+**Flujo:**
+1. Taggear recursos (EC2, S3, RDS…) con `department = <nombre>`
+2. Activar los tags en Billing Console
+3. AWS genera automáticamente reportes CSV agrupados por tag activo
+
+### Por qué las otras opciones fallan
+
+| Opción | Por qué es incorrecta |
+|---|---|
+| **AWS Budgets + budget action** | AWS Budgets lanza alertas y acciones cuando se superan umbrales — no genera reportes por departamento |
+| **Cost Explorer filtrado por Resource** | El filtro "Resource" solo trackea costes de instancias EC2 — muy limitado, no agrupa por departamento |
+| **Cost and Usage Report (CUR)** | CUR contiene desglose por **servicios AWS**, no por departamento/tag. Es un reporte detallado de uso, no de agrupación por negocio |
+
+### Regla mental para el examen
+
+> - **Reporte de costes agrupado por departamento/proyecto/equipo** → **Cost Allocation Tags** (taggear + activar en Billing Console)
+> - **Tags deben activarse** en Billing Console — no son retroactivos
+> - **AWS Budgets** = alertas y acciones cuando se excede presupuesto, no reportes
+> - **Cost Explorer** = visualización y análisis histórico/proyectado, no agrupación por tag de negocio completa
+> - **CUR (Cost and Usage Report)** = máximo detalle de uso por servicio/recurso, no por agrupación departamental
+
+&nbsp;   
+
+&nbsp;
+
+---
+
+## Respuesta: Snowball Edge para transferencia masiva con ancho de banda limitado
+
+**Categoría:** Design Cost-Optimized Architectures
+
+**Escenario clave:** 80 TB de datos a transferir. Con el ancho de banda actual tardaría 2 meses. Se necesita la opción más cost-effective y rápida.
+
+**Respuesta correcta:** **AWS Snowball Edge** → dispositivo físico de transporte. No depende de la red — los datos se envían físicamente por mensajería. Más rápido y barato que esperar 2 meses de transferencia de red.
+
+### Por qué las otras opciones fallan
+
+| Opción | Por qué es incorrecta |
+|---|---|
+| **AWS DataSync** | Sigue usando el ancho de banda de red — el factor limitante del escenario. No mejora la velocidad |
+| **AWS Direct Connect** | Conexión de red dedicada para uso continuo — no es para transferencias one-time de datos masivos |
+| **S3 Multipart Upload** | Solo divide el objeto en partes para subir en paralelo — sigue usando la misma conexión de internet con el mismo ancho de banda |
+
+### Regla mental para el examen
+
+> - **Datos masivos (TB/PB) + ancho de banda limitado / tardaría semanas o meses** → **Snowball / Snowball Edge**
+> - **DataSync, Multipart Upload, Transfer Acceleration** = siguen dependiendo del ancho de banda de red
+> - **Direct Connect** = conexión dedicada persistente, no para migración one-time de datos
+> - Señal clave: "would take X weeks/months to transfer" + volumen grande → **Snowball Edge**
+> - Snowball Edge = almacenamiento + compute en el dispositivo (puede procesar datos antes de enviar)
+
+&nbsp;   
+
+&nbsp;
+
+---
+
+## Respuesta: S3 Gateway Endpoint para acceso privado a S3 sin coste adicional
+
+**Categoría:** Design Cost-Optimized Architectures
+
+**Escenario clave:** EC2 en subnet privada accede a S3. Se quiere la solución más cost-efficient para reducir costes de transferencia de datos.
+
+**Respuesta correcta:** **Amazon S3 Gateway Endpoint** → acceso privado a S3 desde VPC sin IGW ni NAT. **Sin coste adicional** (gratis).
+
+### Gateway Endpoint vs Interface Endpoint — Diferencia de coste
+
+| | Gateway Endpoint | Interface Endpoint |
+|---|---|---|
+| Servicios | **Solo S3 y DynamoDB** | Todos los demás servicios AWS |
+| Coste | **Gratuito** | Coste por hora + por GB procesado |
+| Implementación | Entrada en route table | ENI en subnet (PrivateLink) |
+| Acceso desde on-premises | No | Sí (via VPN/DX) |
+
+### Por qué las otras opciones fallan
+
+| Opción | Por qué es incorrecta |
+|---|---|
+| **NAT Gateway** | Funciona pero **cobra por hora** (incluso idle) + por GB procesado — no es cost-efficient |
+| **S3 Interface Endpoint** | También funciona pero **cobra por hora** por endpoint provisionado — más caro que Gateway |
+| **AWS Transit Gateway** | Para conectar VPCs y redes on-premises — no es la solución para acceder a S3 desde una subnet privada |
+
+### Regla mental para el examen
+
+> - **Acceso privado a S3 o DynamoDB desde VPC + mínimo coste** → **Gateway Endpoint** (gratis)
+> - **Gateway Endpoint = solo S3 y DynamoDB** — para cualquier otro servicio AWS → Interface Endpoint
+> - **NAT Gateway** cobra aunque esté idle — siempre más caro que un Gateway Endpoint para S3/DynamoDB
+> - **Interface Endpoint S3** es válido pero cuesta dinero → Gateway Endpoint es más barato
+> - Señal clave: "lower data transfer costs" + "private subnet" + S3 → **S3 Gateway Endpoint**
+
+&nbsp;   
+
+&nbsp;
+
+---
+
+## Respuesta: Hechos clave sobre VPC Subnets (dos correctas)
+
+**Categoría:** Design Resilient Architectures
+
+**Respuestas correctas:**
+- **Cada subnet mapea a una sola Availability Zone** (no puede abarcar varias AZs)
+- **Cada nueva subnet creada se enlaza por defecto a la main route table del VPC**
+
+### Afirmaciones falsas y la realidad
+
+| Afirmación incorrecta | La realidad |
+|---|---|
+| "Cada subnet abarca 2 AZs" | Cada subnet reside en **exactamente una AZ** — no puede abarcar zonas |
+| "El bloque CIDR permitido en VPC es /16 a /27" | El rango correcto es **/16 (65,536 IPs) a /28 (16 IPs)** — no /27 |
+| "Instancias en subnet privada acceden a internet solo con Elastic IP" | También pueden acceder via **NAT Gateway o NAT Instance** (sin Elastic IP directa en la instancia) |
+
+### Hechos clave de VPC para el examen
+
+> - **VPC abarca todas las AZs de la región** — las subnets son las que están en una AZ específica
+> - **CIDR VPC**: /16 (máximo, 65,536 IPs) → /28 (mínimo, 16 IPs)
+> - **5 IPs reservadas por subnet**: network, router (+1), DNS (+2), futuro (+3), broadcast (last)
+> - **Nueva subnet** → asignada automáticamente a la **main route table** del VPC
+> - **Subnet privada → internet**: NAT Gateway o NAT Instance (no requiere EIP en la instancia)
+> - **EIP** = IP pública estática asignada a una instancia/NI — no es el único mecanismo de acceso a internet
+
+&nbsp;   
+
+&nbsp;
+
+---
+
+## Respuesta: Qué ocurre al hacer Stop/Start en una EC2 (dos correctas)
+
+**Categoría:** Design Resilient Architectures
+
+**Respuestas correctas:**
+- **Los datos de los Instance Store volumes adjuntos se pierden**
+- **El host físico subyacente puede cambiar** (AWS puede mover la instancia a otro host)
+
+### Qué ocurre y qué NO ocurre en Stop/Start
+
+| Elemento | Stop/Start |
+|---|---|
+| **Instance Store data** | ❌ **Se pierde** siempre |
+| **EBS volumes** | ✅ Se preservan |
+| **Host físico subyacente** | Puede cambiar (AWS puede mover la instancia) |
+| **IP pública dinámica** | ❌ Se pierde (nueva IP al Start) |
+| **Elastic IP (EIP)** | ✅ **Permanece asociada** (en VPC) |
+| **ENI (Elastic Network Interface)** | ✅ **Permanece adjunta** |
+| **Private IP address** | ✅ Se preserva |
+
+### Aclaraciones importantes
+
+- Solo instancias **EBS-backed** pueden hacerse Stop/Start (Instance Store-backed solo pueden reboot o terminate)
+- Una instancia EBS-backed **puede tener Instance Store volumes adicionales** — esos sí se pierden al hacer Stop
+- **EC2-Classic** (legacy): EIP sí se desasocia al hacer Stop. **EC2-VPC** (actual): EIP permanece asociada
+- El examen puede incluir Instance Store volumes como distractor aunque la instancia sea EBS-backed
+
+### Regla mental para el examen
+
+> - **Stop/Start EC2** → Instance Store data **se pierde**, host puede cambiar, EIP permanece, ENI permanece
+> - **EIP permanece** asociada en VPC aunque la instancia esté stopped
+> - **IP pública dinámica** (no EIP) sí se pierde al Stop/Start
+> - **ENI no se desasocia** al hacer Stop — sigue adjunta a la instancia
+> - Señal clave: "stop and start" + "instance store" → los datos del instance store **se borran**
+
+&nbsp;   
+
+&nbsp;
+
+---
+
+## Respuesta: Migración MongoDB → Amazon DocumentDB + EKS
+
+**Categoría:** Design Resilient Architectures / High-Performing Architectures
+
+**Escenario clave:** Workload Kubernetes con base de datos MongoDB. Se quiere migrar a AWS con mínimo cambio de código y compatibilidad MongoDB.
+
+**Respuesta correcta:** **EKS** (Kubernetes gestionado) + **Amazon DocumentDB** (compatible con MongoDB API)
+
+**Por qué DocumentDB:** Compatible con MongoDB workloads (misma API). Migración offline (snapshot/restore) o online (AWS DMS leyendo el oplog de MongoDB).
+
+### Por qué las otras opciones fallan
+
+| Opción | Por qué es incorrecta |
+|---|---|
+| **ECS + Aurora Serverless** | MongoDB es NoSQL — no se puede migrar directamente a Aurora (relacional). ECS Anywhere = contenedores en infraestructura del cliente, no reemplaza Kubernetes |
+| **EKS + DynamoDB** | DynamoDB tiene APIs distintas a MongoDB → requiere cambios de código. EKS Anywhere = despliegue en infraestructura del cliente, no en AWS managed |
+| **ECS + Neptune** | Neptune = base de datos de grafos — no es compatible con MongoDB workloads |
+
+### Regla mental para el examen
+
+> - **MongoDB → AWS con compatibilidad de API** → **Amazon DocumentDB** (no DynamoDB, no Aurora, no Neptune)
+> - **Kubernetes gestionado en AWS** → **Amazon EKS** (no ECS, no EKS Anywhere que es on-premises)
+> - **EKS Anywhere / ECS Anywhere** = extensión para infraestructura del cliente, no para AWS Cloud managed
+> - **DynamoDB ≠ MongoDB**: DynamoDB es key-value/document pero con APIs completamente distintas
+> - **Neptune** = grafos (relaciones); **DocumentDB** = documentos JSON (MongoDB compatible)
+> - Migración DMS desde MongoDB → DMS lee el **oplog** de MongoDB para CDC
+
+&nbsp;   
+
+&nbsp;
+
+&nbsp;
+
+---
+
+## Respuesta: RDS Storage Auto Scaling
+
+**Categoría:** Design Resilient Architectures
+
+**Escenario clave:** Base de datos MySQL en RDS se está quedando sin espacio en disco. Se necesita aumentar el almacenamiento **sin impactar el rendimiento** y con el **menor overhead operacional**.
+
+**Respuesta correcta:** **Habilitar RDS Storage Auto Scaling**
+
+**Por qué Storage Auto Scaling:** Escala el almacenamiento automáticamente cuando el consumo real se acerca al límite provisionado. Zero downtime, sin intervención manual. Solo se configura el límite máximo de almacenamiento deseado. Sin coste adicional (pagas solo por el almacenamiento usado).
+
+### Por qué las otras opciones fallan
+
+| Opción | Por qué es incorrecta |
+|---|---|
+| **Increase allocated storage** | Soluciona el problema inmediato pero requiere monitorización y planificación proactiva. Cada vez que el storage crece hay que intervenir manualmente → overhead operacional |
+| **Modify to Provisioned IOPS** | Mejora el rendimiento de disco (IOPS) pero **no aumenta el espacio de almacenamiento** — no resuelve el problema |
+| **Change default_storage_engine to MyISAM** | MyISAM es un motor de almacenamiento de MySQL, no tiene efecto sobre el espacio de disco disponible en RDS |
+
+### Regla mental para el examen
+
+> - **RDS se queda sin disco + menor overhead** → **Storage Auto Scaling** (no manual resize)
+> - **Increase allocated storage** = manual, no escala solo → más overhead
+> - **Provisioned IOPS** = rendimiento (velocidad), no capacidad (espacio)
+> - **Storage Auto Scaling** = zero downtime + automático + sin coste adicional
+> - Señal clave: "without impacting performance" + "least operational overhead" → Auto Scaling
+
+&nbsp;   
+
+&nbsp;
+
+&nbsp;
+
+---
+
+## Respuesta: IAM Groups + IAM Policy con MFA (gestión de usuarios por departamento)
+
+**Categoría:** Design Secure Architectures
+
+**Escenario clave:** Cuenta AWS única, múltiples departamentos, nuevos usuarios frecuentes. Necesita MFA obligatorio, acceso de solo lectura, y gestión eficiente.
+
+**Respuesta correcta:** **IAM Group por departamento + IAM Policy con MFA + least privilege → adjuntar Policy al Group**
+
+**Por qué IAM Groups:** Permiten aplicar permisos a múltiples usuarios a la vez. Al añadir un usuario al grupo, hereda automáticamente la policy. Gestión centralizada por departamento.
+
+### Por qué las otras opciones fallan
+
+| Opción | Por qué es incorrecta |
+|---|---|
+| **IAM Role con MFA → adjuntar al IAM Group** | No se puede adjuntar un IAM Role directamente a un IAM Group. Los grupos reciben IAM Policies, no Roles |
+| **SCP con MFA → adjuntar a cada IAM User** | SCPs solo se pueden adjuntar a root/OU/cuenta en AWS Organizations, no a IAM Users. Además el escenario es cuenta única, no multi-cuenta |
+| **IAM Roles por usuario + permissions boundary** | No se puede asociar un Role directamente a un User. Permissions boundary define el máximo, no el mínimo de acceso — no es la solución aquí |
+
+### Regla mental para el examen
+
+> - **MFA obligatorio + múltiples usuarios por departamento → cuenta única** → **IAM Group + IAM Policy con condición MFA**
+> - **IAM Group recibe** → **IAM Policies** (no Roles)
+> - **SCP** → solo aplica a Organizations (root/OU/cuenta), **nunca a IAM Users directamente**
+> - **Permissions boundary** = limita el máximo de permisos — no es una herramienta de autenticación
+> - **IAM Role → IAM User**: no es asignación directa — el user asume el role (assume role)
+> - Señal clave: "single AWS account" + "MFA" + "departments" → IAM Groups + Policy MFA
+
+&nbsp;   
+
+&nbsp;
+
+&nbsp;
+
+---
+
+## Respuesta: DynamoDB DAX + API Gateway + Auto Scaling (juego AR serverless)
+
+**Categoría:** Design High-Performing Architectures
+
+**Escenario clave:** Juego móvil serverless con millones de usuarios, DynamoDB + Lambda. Se necesita mejorar rendimiento, escalabilidad y mantener costes bajos. La tabla DynamoDB fue creada con **AWS CLI**.
+
+**Respuestas correctas (TWO):**
+1. **DAX + Auto Scaling habilitado + aumentar el máximo de capacidad provisionada**
+2. **API Gateway + Lambda + caching en datos frecuentes + DynamoDB global replication**
+
+### Puntos clave
+
+| Concepto | Detalle |
+|---|---|
+| **DAX** | Cache in-memory para DynamoDB: mejora de **milisegundos a microsegundos**, hasta 10x |
+| **Auto Scaling en DynamoDB (CLI)** | **NO está habilitado por defecto** cuando la tabla se crea por AWS CLI — hay que activarlo manualmente |
+| **Auto Scaling en DynamoDB (Consola)** | Sí está habilitado por defecto al crear desde la consola |
+| **API Gateway caching** | Reduce llamadas a Lambda/DynamoDB para datos frecuentemente accedidos |
+| **DynamoDB Global Tables** | Replicación multi-región para baja latencia global |
+
+### Por qué las otras opciones fallan
+
+| Opción | Por qué es incorrecta |
+|---|---|
+| **CloudFront + DynamoDB como origin + ElastiCache** | CloudFront **no es compatible con DynamoDB como origin** — CloudFront sirve contenido estático/HTTP, no consultas DynamoDB |
+| **IAM Identity Center + SSO + RCU/WCU manual alto** | IAM Identity Center no mejora rendimiento. Capacidad manual fija = cara y no adaptable al tráfico |
+| **"Auto Scaling habilitado por defecto" + DAX** | **FALSO**: Auto Scaling NO está habilitado por defecto en tablas creadas con AWS CLI |
+
+### Regla mental para el examen
+
+> - **DynamoDB lento + millones de requests** → **DAX** (milisegundos → microsegundos)
+> - **DynamoDB creado con AWS CLI** → **Auto Scaling NO habilitado por defecto** (trap frecuente)
+> - **DynamoDB creado con Consola** → Auto Scaling sí habilitado por defecto
+> - **CloudFront + DynamoDB** → **INCOMPATIBLES** (CloudFront no puede usar DynamoDB como origin)
+> - **API Gateway caching** → reduce latencia y costes en datos frecuentemente accedidos
+> - **Capacidad provisionada fija alta** → costoso (no se adapta al tráfico real)
+
+&nbsp;   
+
+&nbsp;
+
+&nbsp;
+
+---
+
+## Respuesta: Migrar Aurora Provisioned → Aurora Serverless con DMS
+
+**Categoría:** Design Resilient Architectures
+
+**Escenario clave:** Aurora DB provisionada (db.t4g.medium) no soporta picos de tráfico en flash sales. Hay que migrar a Aurora Serverless con **mínimo downtime** y mínimo impacto operacional.
+
+**Respuesta correcta:** **AWS DMS para migrar a un nuevo cluster Aurora Serverless** (replicación continua, source DB permanece activa)
+
+### Por qué DMS es la respuesta
+
+- DMS replica cambios continuamente del source al target durante la migración
+- La base de datos origen permanece **completamente operativa** durante el proceso
+- Downtime prácticamente nulo: solo el corte final de switchover
+
+### Por qué las otras opciones fallan
+
+| Opción | Por qué es incorrecta |
+|---|---|
+| **Change Aurora instance class to Serverless** | **Imposible** — no se puede cambiar de Provisioned a Serverless directamente cambiando la clase de instancia |
+| **Snapshot → nuevo Aurora cluster** | Largo período de downtime: la aplicación debe detenerse hasta que el nuevo cluster esté listo |
+| **Aurora Replica Serverless → failover → promote** | Durante el failover, la DB no acepta escrituras por un breve período → hay impacto en la operación |
+
+### Regla mental para el examen
+
+> - **Provisioned → Serverless en Aurora** = **no es un cambio de clase de instancia** — requiere crear un cluster nuevo
+> - **Migración con mínimo downtime** → **DMS** (source permanece activo durante toda la migración)
+> - **Snapshot restore** = downtime completo durante la creación del nuevo cluster
+> - **Failover a replica** = breve indisponibilidad de escrituras durante el failover
+> - **Aurora Serverless** = escala automáticamente según demanda — ideal para cargas con picos impredecibles
+
+&nbsp;   
+
+&nbsp;
+
+&nbsp;
+
+---
+
+## Respuesta: Security Group + NACL con puertos efímeros (port 443 inbound)
+
+**Categoría:** Design Secure Architectures
+
+**Escenario clave:** EC2 en subnet pública, NACL bloquea todo el tráfico. Hay que permitir tráfico entrante en puerto 443 desde cualquier origen. La instancia usa default security group.
+
+**Respuestas correctas (TWO):**
+1. **Security Group**: añadir regla inbound TCP 443 desde `0.0.0.0/0`
+2. **NACL**: permitir inbound TCP 443 desde `0.0.0.0/0` **Y** outbound TCP 32768-65535 hacia `0.0.0.0/0`
+
+### Por qué los puertos efímeros son necesarios en NACL
+
+| Componente | Stateful? | Comportamiento |
+|---|---|---|
+| **Security Group** | ✅ Stateful | Una regla inbound aplica automáticamente el tráfico de retorno — no necesitas regla outbound explícita |
+| **NACL** | ❌ Stateless | Debes permitir **explícitamente** tanto el tráfico inbound como el tráfico de retorno (puertos efímeros) |
+
+**Flujo de conexión HTTPS:**
+1. Cliente → EC2: puerto destino **443** (inbound)
+2. EC2 → Cliente: puerto destino **efímero** (32768-65535 para Linux/Amazon Linux) (outbound)
+
+### Rangos de puertos efímeros por cliente
+
+| Sistema Operativo | Rango efímero |
+|---|---|
+| **Amazon Linux / Linux kernels** | 32768 - 61000 |
+| **Windows Server 2008+** | 49152 - 65535 |
+| **Windows XP/2003** | 1025 - 5000 |
+| **ELB / NAT Gateway / Lambda** | 1024 - 65535 |
+
+### Por qué las otras opciones fallan
+
+| Opción | Por qué es incorrecta |
+|---|---|
+| **SG: outbound TCP 443 → 0.0.0.0/0** | Innecesario — el default SG ya tiene outbound all traffic. Solo necesitas la regla inbound |
+| **NACL: inbound + outbound TCP 443** | Incorrecto — el tráfico de retorno usa puertos efímeros (32768-65535), no el puerto 443 |
+| **NACL: solo outbound 32768-65535** | Parcialmente correcto — falta la regla inbound para el puerto 443 |
+
+### Regla mental para el examen
+
+> - **NACL = stateless** → siempre necesitas regla inbound + outbound de retorno (puertos efímeros)
+> - **Security Group = stateful** → solo regla inbound; el retorno es automático
+> - **Puerto 443 inbound** → respuesta usa **puertos efímeros outbound** (32768-65535 para Linux)
+> - **NACL bloquea todo** → debes añadir **ambas** reglas: inbound 443 + outbound 32768-65535
+> - Señal clave: "network ACL" + "allow incoming port 443" → recuerda puertos efímeros en outbound
+
+&nbsp;   
+
+&nbsp;
+
+&nbsp;
+
+---
+
+## Respuesta: Kinesis Data Streams + Lambda para lectura de registros en batches
+
+**Categoría:** Design High-Performing Architectures
+
+**Escenario clave:** Aplicación web con picos de tráfico (503 errors). Necesitan un servicio de **analytics en tiempo real** que pueda **leer registros en batches**.
+
+**Respuesta correcta:** **Amazon Kinesis Data Streams + AWS Lambda** (Lambda lee en batches del stream)
+
+### Comparativa Kinesis Data Streams vs Firehose
+
+| Característica | **Kinesis Data Streams (KDS)** | **Kinesis Data Firehose** |
+|---|---|---|
+| **Latencia** | Milisegundos (real-time) | ~60 segundos (near real-time) |
+| **Lambda como consumer** | ✅ Sí — lee registros en batches | ⚠️ Solo para transformación, no como destino consumer |
+| **Destinos** | Consumidores personalizados | S3, Redshift, OpenSearch, Splunk |
+| **Gestión de shards** | Manual (tú gestionas) | Totalmente gestionado |
+| **Retención de datos** | 24h - 365 días | No retiene (entrega directa) |
+
+### Por qué las otras opciones fallan
+
+| Opción | Por qué es incorrecta |
+|---|---|
+| **Firehose + Lambda** | Lambda puede integrarse con Firehose para transformación, pero **no puede ser el consumer principal** del stream — Firehose entrega a S3/Redshift/etc., no a Lambda |
+| **S3 + Athena** | Athena analiza datos históricos en S3 — **no es real-time**. Requiere primero almacenar los datos |
+| **S3 + Redshift Spectrum** | Redshift Spectrum consulta datos en S3 — tampoco es real-time. No cumple el requisito de analytics en tiempo real |
+
+### Regla mental para el examen
+
+> - **Real-time analytics + leer en batches** → **Kinesis Data Streams + Lambda**
+> - **Lambda + Kinesis**: procesa hasta **10 batches por shard simultáneamente**, mantiene orden a nivel de partition key
+> - **Firehose** = near real-time (~60s) + entrega a destinos fijos (S3, Redshift) — Lambda es transformador, no consumer
+> - **Athena / Redshift Spectrum** = análisis de datos históricos en S3 — no real-time
+> - Señal clave: "real-time" + "read records in batches" → **KDS + Lambda**
+
+&nbsp;   
+
+&nbsp;
+
+&nbsp;
+
+---
+
+## Respuesta: SCP en OU para restringir acceso a AWS Config (multi-cuenta)
+
+**Categoría:** Design Secure Architectures
+
+**Escenario clave:** AWS Organizations con cuentas personales para desarrolladores. Hay que evitar que modifiquen o eliminen reglas de AWS Config. Mínimo overhead operacional.
+
+**Respuesta correcta:** **Añadir cuentas a una OU + adjuntar SCP que restringe acceso a AWS Config**
+
+### Por qué SCP es la respuesta
+
+- SCPs definen el **máximo de permisos** disponibles en todas las cuentas del OU
+- **Incluso si un developer tiene admin privileges**, no puede realizar acciones bloqueadas por SCP
+- SCPs también pueden bloquear al **root user** de la cuenta — algo que las IAM Policies no pueden hacer
+- Se aplica centralmente a toda la OU sin tocar cada cuenta individualmente
+
+### Por qué las otras opciones fallan
+
+| Opción | Por qué es incorrecta |
+|---|---|
+| **IAM Role + trust relationship → deshabilitar root user** | Las IAM Policies (incluyendo trust relationships) **no aplican al root user de la cuenta**. Solo SCP puede restringir al root |
+| **AWS Config rule en root account** | Solo **detecta** cambios, no los **previene** — no restringe permisos |
+| **Control Tower + IAM trust relationship por developer** | Control Tower gestiona governance del entorno multi-cuenta, pero no restringe acceso a servicios específicos. IAM trust relationships no bloquean acciones de Config |
+
+### Regla mental para el examen
+
+> - **Evitar que developers modifiquen recursos en sus cuentas (multi-cuenta)** → **SCP en OU**
+> - **SCP puede restringir al root user** — las IAM Policies NO pueden
+> - **AWS Config rules** = detectan y reportan incumplimientos — no bloquean acciones
+> - **Control Tower** = setup y governance del entorno, no restricción de permisos de servicio
+> - **IAM trust relationship** = define quién puede asumir un rol, no bloquea acciones directamente
+> - Señal clave: "prevent modification" + "multiple AWS accounts" + "least overhead" → **SCP en OU**
+
+&nbsp;   
+
+&nbsp;
+
+&nbsp;
+
+---
+
+## Respuesta: ALB + múltiples certificados SSL con SNI (múltiples dominios HTTPS)
+
+**Categoría:** Design Secure Architectures
+
+**Escenario clave:** Múltiples dominios distintos (no subdominios) sirviendo SSL. Sin reprovisionamiento de certificados al añadir nuevos dominios. Solución más **cost-effective**.
+
+**Respuesta correcta:** **Subir todos los certificados SSL al ALB + bind múltiples certificados al mismo listener seguro → ALB usa SNI automáticamente**
+
+### Cómo funciona SNI en ALB
+
+- **SNI (Server Name Indication)**: extensión de TLS que permite múltiples dominios en la misma IP incluyendo el hostname del cliente en el handshake
+- ALB selecciona automáticamente el certificado óptimo para cada cliente
+- Se pueden añadir nuevos certificados sin modificar el listener ni reprovisionarlo
+- **Sin coste adicional** — incluido en el precio del ALB
+
+### Comparativa de opciones de certificados SSL
+
+| Opción | ¿Múltiples dominios distintos? | ¿Sin reprovisionamiento? | Cost-effective? |
+|---|---|---|---|
+| **ALB + SNI** | ✅ Sí | ✅ Solo añadir certificado | ✅ Sin coste extra |
+| **Wildcard certificate** | ❌ Solo subdominios (`*.dominio.com`) | ✅ | ✅ |
+| **SAN certificate** | ✅ Sí | ❌ Requiere reprovisionar al añadir dominio | ✅ |
+| **CloudFront + dedicated IPs** | ✅ Sí | ✅ | ❌ Coste mensual adicional |
+
+### Por qué las otras opciones fallan
+
+| Opción | Por qué es incorrecta |
+|---|---|
+| **Wildcard certificate** | Solo cubre subdominios (`*.ejemplo.com`) — no dominios completamente distintos (i-love-manila.com ≠ i-love-cebu.com) |
+| **SAN certificate** | Válido técnicamente, pero **requiere reauthentication y reprovisioning** cada vez que se añade un nuevo dominio |
+| **CloudFront + dedicated IPs** | Cargo mensual adicional por las IPs dedicadas — **no es cost-effective** |
+
+### Regla mental para el examen
+
+> - **Múltiples dominios distintos + HTTPS + sin reprovisionamiento** → **ALB + SNI** (múltiples certificados en mismo listener)
+> - **Wildcard** = solo subdominios del mismo dominio raíz — no dominios distintos
+> - **SAN** = añadir dominios en el mismo certificado, pero requiere reprovisionar al cambiar
+> - **SNI en ALB** = gratis, automático, añade certificados sin tocar el listener
+> - **CloudFront + dedicated IPs** = coste adicional mensual → no cost-effective si ALB es suficiente
+> - Señal clave: "multiple domains" + "no reauthentication/reprovision" + "cost-effective" → **ALB SNI**
+
+&nbsp;   
+
+&nbsp;
+
+&nbsp;
+
+---
+
+## Respuesta: CloudFront OAC + Signed URLs/Cookies (contenido privado S3)
+
+**Categoría:** Design Secure Architectures
+
+**Escenario clave:** Archivos en S3 detrás de CloudFront. Actualmente accesibles por URL de S3 directa O por CloudFront. Se necesita que **solo clientes específicos** puedan acceder **únicamente a través de CloudFront**.
+
+**Respuestas correctas (TWO):**
+1. **Origin Access Control (OAC)** en el bucket S3 → solo CloudFront puede leer el bucket (bloquea URLs directas de S3)
+2. **CloudFront Signed URLs o Signed Cookies** → solo usuarios autorizados pueden acceder vía CloudFront
+
+### Flujo de seguridad completo
+
+```
+Cliente → CloudFront (con Signed URL/Cookie) → S3 (solo accesible por OAC, no por URL directa)
+```
+
+| Mecanismo | Propósito |
+|---|---|
+| **OAC (Origin Access Control)** | Bloquea acceso directo a S3 — solo CloudFront puede leer |
+| **Signed URLs** | Acceso temporal a un **archivo específico** — para un usuario concreto |
+| **Signed Cookies** | Acceso temporal a **múltiples archivos** — para un usuario concreto |
+
+### Por qué las otras opciones fallan
+
+| Opción | Por qué es incorrecta |
+|---|---|
+| **CloudFront Functions** | Funciones JavaScript ligeras para customización CDN (headers, redirects) — no sirven para control de acceso/seguridad |
+| **Origin Shield** | Mejora rendimiento y disponibilidad del origen (caching adicional) — **no es una función de seguridad** |
+| **S3 Presigned URLs** | Proporcionan acceso temporal directo a S3 — no escalan bien para múltiples archivos/usuarios y **no pasan por CloudFront** |
+
+### OAC vs OAI (Origin Access Identity — legacy)
+
+| | **OAC (recomendado)** | **OAI (legacy)** |
+|---|---|---|
+| Soporte SSE-KMS | ✅ | ❌ |
+| Soporte HTTP POST | ✅ | ❌ |
+| Estado | Recomendado | Deprecated |
+
+### Regla mental para el examen
+
+> - **Contenido privado S3 + solo via CloudFront** → **OAC** (bloquea URLs directas S3) + **Signed URLs/Cookies**
+> - **Signed URL** = un archivo, un usuario, tiempo limitado
+> - **Signed Cookie** = múltiples archivos, un usuario, tiempo limitado
+> - **OAC** = reemplaza OAI (Origin Access Identity) — más moderno, soporta SSE-KMS
+> - **CloudFront Functions** = transformaciones ligeras (URL rewrites, headers) — no control de acceso
+> - **Origin Shield** = capa adicional de caché para reducir carga en origin — no es seguridad
+> - Señal clave: "only specific client" + "via CloudFront only" → **OAC + Signed URLs/Cookies**
+
+&nbsp;   
+
+&nbsp;
+
+&nbsp;
+
+---
+
+## Respuesta: Opciones NO válidas para mitigar DDoS (Dedicated EC2 + EFA)
+
+**Categoría:** Design High-Performing Architectures / Design Secure Architectures
+
+**Escenario clave:** Aplicación HPC pública. Pregunta qué opciones **NO** son válidas para mitigar ataques DDoS. (Select TWO — las incorrectas para DDoS)
+
+**Respuestas correctas (las que NO sirven para DDoS):**
+1. **Dedicated EC2 instances** — solo una opción de facturación, no mitiga DDoS
+2. **Múltiples EFA por instancia** — mejora rendimiento HPC, pero **solo se puede añadir 1 EFA por instancia** y no mitiga DDoS
+
+### Técnicas VÁLIDAS para mitigar DDoS
+
+| Servicio | Cómo ayuda contra DDoS |
+|---|---|
+| **AWS Shield** | Protección gestionada contra DDoS (Standard: gratis; Advanced: enterprise) |
+| **AWS WAF** | Filtra tráfico malicioso con reglas customizables |
+| **CloudFront** | Distribuye tráfico globalmente, absorbe volumetría en edge locations |
+| **ALB + Auto Scaling** | Distribuye y escala ante picos de tráfico |
+| **RDS en subnet privada** | Evita exposición directa de la base de datos a Internet |
+
+### Por qué las dos opciones fallan para DDoS
+
+| Opción | Por qué NO mitiga DDoS |
+|---|---|
+| **Dedicated EC2 instances** | Solo garantiza hardware dedicado (sin sharing físico) — no distribuye tráfico ni filtra ataques |
+| **Múltiples EFA por instancia** | EFA = adaptador de red para HPC/ML; además **solo 1 EFA por instancia** — más ancho de banda no ayuda contra DDoS volumétrico |
+
+### Regla mental para el examen
+
+> - **DDoS mitigation** → **Shield + WAF + CloudFront + ALB + Auto Scaling**
+> - **EFA (Elastic Fabric Adapter)** = aceleración de red para HPC/ML — máximo **1 por instancia**
+> - **Dedicated Instances** = facturación/aislamiento de hardware — no afecta a DDoS
+> - Edge services (CloudFront, WAF, Route53, API Gateway) = más efectivos contra DDoS que servicios regionales
+> - Señal clave: "NOT suitable for DDoS" → busca opciones de rendimiento/facturación, no de distribución/filtrado
+
+&nbsp;   
+
+&nbsp;
+
+&nbsp;
+
+---
+
+## Respuesta: AWS Glue Job Bookmark (evitar reprocesamiento de datos antiguos)
+
+**Categoría:** Design High-Performing Architectures
+
+**Escenario clave:** AWS Glue ETL jobs reprocessan datos antiguos de S3 en cada ejecución, aumentando el tiempo de ejecución. Se busca la solución **más operacionalmente eficiente**.
+
+**Respuesta correcta:** **Habilitar Job Bookmark en el ETL job de AWS Glue**
+
+**Cómo funciona Job Bookmark:**
+- Almacena el estado del progreso del job en un datastore persistente separado
+- En la siguiente ejecución, el job solo procesa los **datos nuevos** desde el último punto procesado
+- Funciona aunque cambie el job, el entorno o los datos subyacentes
+- Especialmente útil para datasets grandes o jobs de larga duración
+
+### Por qué las otras opciones fallan
+
+| Opción | Por qué es incorrecta |
+|---|---|
+| **Incrementar el tamaño del dataset** | Aumenta el tiempo de procesamiento y los recursos necesarios — agrava el problema |
+| **Paralelizar con múltiples EC2** | Acelera el procesamiento pero **sigue reprocesando datos antiguos** — no resuelve la causa raíz. Además añade complejidad operacional |
+| **Lambda + EventBridge para eliminar datos procesados** | Añade complejidad; si un job falla y hay que reejecutarlo, los datos ya fueron eliminados → inconsistencias |
+
+### Regla mental para el examen
+
+> - **Glue ETL reprocessa datos antiguos en cada ejecución** → **Job Bookmark**
+> - **Job Bookmark** = rastrea el último punto procesado; solo ejecuta sobre datos nuevos en la siguiente corrida
+> - No confundir con paralelismo — paralelismo = velocidad, bookmark = evitar trabajo redundante
+> - **Eliminar datos procesados con Lambda** = frágil (pierde datos si el job falla antes de completarse)
+> - Señal clave: "old data being reprocessed" + "ETL job" + "operationally efficient" → **AWS Glue Job Bookmark**
+
+&nbsp;   
+
+&nbsp;
+
+&nbsp;
+
+---
+
+## Respuesta: SSM Parameter Store SecureString vs Secrets Manager (cost-effective)
+
+**Categoría:** Design Secure Architectures
+
+**Escenario clave:** Aplicación multi-tier con variables de configuración (DB hostnames, passwords, product keys). Requieren almacenamiento seguro con cifrado. Solución **más cost-effective**.
+
+**Respuesta correcta:** **AWS Systems Manager Parameter Store con tipo SecureString + KMS**
+
+### Parameter Store vs Secrets Manager
+
+| Característica | **SSM Parameter Store SecureString** | **AWS Secrets Manager** |
+|---|---|---|
+| **Coste** | Gratis (Standard tier) / $0.05/10k API calls (Advanced) | ~$0.40/secreto/mes |
+| **Cifrado** | ✅ KMS | ✅ KMS |
+| **Rotación automática** | ❌ | ✅ |
+| **Caso de uso ideal** | Config params, variables de app que cambian poco | Credenciales que rotan (DB passwords, API keys) |
+| **Integración RDS/Aurora** | ❌ nativa | ✅ nativa con rotación |
+
+**Regla de selección:**
+- Valores **estáticos** (hostnames, env settings, product keys) → **Parameter Store SecureString** (gratis)
+- Credenciales que necesitan **rotación automática** → **Secrets Manager**
+
+### Por qué las otras opciones fallan
+
+| Opción | Por qué es incorrecta |
+|---|---|
+| **Secrets Manager + BatchGetSecretValue** | Válido técnicamente pero **$0.40/secreto/mes** — costoso para muchos valores estáticos |
+| **S3 con cifrado** | No es práctica recomendada — hay que actualizar y subir el archivo cada vez que cambia un valor |
+| **SSM OpsCenter** | OpsCenter es para gestión de incidentes operacionales (OpsItems) — **no es un datastore de configuración** |
+
+### Regla mental para el examen
+
+> - **Almacenamiento seguro de config + cost-effective** → **SSM Parameter Store SecureString**
+> - **Secrets Manager** = más caro (~$0.40/secreto/mes) → solo cuando necesitas rotación automática
+> - **SecureString** = cifrado con KMS en Parameter Store — sin coste adicional en Standard tier
+> - **OpsCenter** = gestión de incidentes operacionales — no confundir con Parameter Store
+> - Señal clave: "cost-effective" + "encrypted" + "app variables/config" → **SSM Parameter Store SecureString**
+
+&nbsp;   
+
+&nbsp;
+
+&nbsp;
+
+---
+
+## Respuesta: EC2 sin acceso a Internet — causas (Public IP + Route Table)
+
+**Categoría:** Design Resilient Architectures
+
+**Escenario clave:** Nueva subnet en VPC con Internet Gateway. EC2 desplegado en la nueva subnet no es accesible desde Internet. Dos causas posibles.
+
+**Respuestas correctas (TWO):**
+1. **El EC2 no tiene una IP pública (Public IP o EIP) asociada**
+2. **La route table no está configurada correctamente para enviar tráfico al Internet Gateway**
+
+### Checklist de accesibilidad Internet para EC2
+
+| Requisito | ¿Qué verificar? |
+|---|---|
+| **IP pública** | ¿Tiene Public IP asignada automáticamente o Elastic IP? |
+| **Route table** | ¿Tiene ruta `0.0.0.0/0 → igw-xxxxx`? |
+| **Security Group** | ¿Permite inbound en el puerto requerido? |
+| **NACL** | ¿Permite inbound en el puerto + outbound en puertos efímeros? |
+| **Internet Gateway** | ¿Está adjunto al VPC? |
+
+### Por qué las otras opciones fallan
+
+| Opción | Por qué es incorrecta |
+|---|---|
+| **EFA no adjunto** | EFA = acelerador de red para HPC/ML — no tiene relación con la conectividad pública a Internet |
+| **No está en el mismo Auto Scaling Group** | Los ASG no afectan la conectividad de red de las instancias |
+| **Route table con Customer Gateway (CGW)** | CGW se usa para conexiones **VPN** — el gateway correcto para Internet es el **Internet Gateway (IGW)** |
+
+### Regla mental para el examen
+
+> - **EC2 no accesible desde Internet** → verificar 2 cosas: **IP pública** + **route table con ruta al IGW**
+> - **Customer Gateway (CGW)** = componente VPN (lado del cliente on-premises) — no para tráfico Internet
+> - **EFA** = rendimiento HPC — no necesario para acceso a Internet
+> - **Auto Scaling Group** = escalado de capacidad — no afecta routing ni IPs
+> - Nueva subnet = **NO** hereda auto-assign public IP ni route table con IGW — hay que configurarlo manualmente
+> - Señal clave: "nueva subnet" + "no accesible desde Internet" → IP pública + route table al IGW
+
+&nbsp;   
+
+&nbsp;
+
+&nbsp;
